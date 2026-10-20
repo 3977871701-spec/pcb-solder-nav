@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KiCad 焊接导航</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: workbench split — board drawing (sticky, pan/zoom) on the left, solder-step checklist on the right; stacks on phones. */
+:root {
+  --bg: #e9eeea; --panel: #f8faf8; --fg: #16201b; --muted: #5a6a61; --line: #cdd8d1;
+  --board: #d9e4dc; --edge: #3d5a4a; --track: #bccbc1; --pad: #b0955a; --body: #5a6a61; --silk: #8a9a90;
+  --accent: #cf1f63; --accent-soft: #cf1f6322; --pin1: #0b7fc0; --done: #24935a; --warn: #a8600a; --warn-bg: #fbecd6;
+  --net: #7a3fd1; --pn: #1b140a; --shadow: #10201833;
+  --font-display: "Chakra Petch", "IBM Plex Sans", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-body: "IBM Plex Sans", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1310; --panel: #141c18; --fg: #e3ebe6; --muted: #8d9e95; --line: #263530;
+  --board: #10291c; --edge: #6fa286; --track: #1d4430; --pad: #a58c55; --body: #9fb3a8; --silk: #4f6a5c;
+  --accent: #ff5a92; --accent-soft: #ff5a9226; --pin1: #47c3ff; --done: #4bc97c; --warn: #f0b25c; --warn-bg: #3a2a12;
+  --net: #b48cff; --pn: #120d05; --shadow: #00000066;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1310; --panel: #141c18; --fg: #e3ebe6; --muted: #8d9e95; --line: #263530;
+  --board: #10291c; --edge: #6fa286; --track: #1d4430; --pad: #a58c55; --body: #9fb3a8; --silk: #4f6a5c;
+  --accent: #ff5a92; --accent-soft: #ff5a9226; --pin1: #47c3ff; --done: #4bc97c; --warn: #f0b25c; --warn-bg: #3a2a12;
+  --net: #b48cff; --pn: #120d05; --shadow: #00000066;
+  color-scheme: dark; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; }
+button, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 24px; margin-bottom: 14px; }
+.brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0; letter-spacing: .02em; line-height: 1.2; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 3px; align-items: stretch; }
+.tabs button { border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
+.tabs button .k { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
+.tabs button .s { font-size: 11px; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
+.tabs button[aria-selected="true"] .s { color: inherit; opacity: .75; }
+.tabs .add { border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+@media (max-width: 900px) { .stage { position: relative; top: 0; } }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.tbtn { border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 13px; min-width: 32px; }
+.tbtn[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.tbtn:hover:not([aria-pressed="true"]), .seg button:hover:not([aria-pressed="true"]) { background: var(--accent-soft); }
+.tbtn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+select.tbtn { padding: 4px 6px; background: var(--panel); }
+.spacer { flex: 1; }
+.hint { color: var(--muted); font-size: 12px; }
+.svgwrap { position: relative; height: min(74vh, 820px); touch-action: none; cursor: grab; }
+@media (max-width: 900px) { .svgwrap { height: 62vh; } }
+.svgwrap.drag { cursor: grabbing; }
+svg#board { width: 100%; height: 100%; display: block; user-select: none; }
+.b-fill { fill: var(--board); }
+.b-edge { fill: none; stroke: var(--edge); stroke-width: .25; }
+.trk { fill: none; stroke: var(--track); stroke-linecap: round; }
+.via { fill: var(--track); }
+.bsilk { fill: none; stroke: var(--silk); stroke-width: .12; }
+.part .pad { fill: var(--pad); fill-rule: evenodd; }
+.part .pad.p1 { fill: var(--pin1); }
+.part .pad.npth { fill: var(--bg); stroke: var(--body); stroke-width: .08; }
+.part .body { fill: none; stroke: var(--body); stroke-width: .1; }
+.part .sk { fill: none; stroke: var(--silk); stroke-width: .1; }
+.part { cursor: pointer; }
+.part.tp .pad { fill: var(--silk); }
+.part.dnp .pad { fill: none; stroke: var(--muted); stroke-width: .06; stroke-dasharray: .15 .1; }
+.part.done .pad, .part.done .pad.p1 { fill: var(--done); }
+.dim .part:not(.hi):not(.nhi) { opacity: .28; }
+.dim .trk, .dim .bsilk, .dim .via { opacity: .5; }
+.dim .part.nhi { opacity: 1; }
+.part.hi .pad { fill: var(--accent); }
+.part.hi .pad.p1 { fill: var(--pin1); }
+.part.hi .body { stroke: var(--accent); stroke-width: .16; }
+.part.cur .body { stroke-width: .28; }
+.part .pad.net { fill: var(--net); }
+.part .pad.psel { fill: var(--accent); stroke: var(--fg); stroke-width: .08; }
+.pn { font-family: var(--font-mono); font-weight: 600; fill: var(--pn); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.ring { fill: none; stroke: var(--accent); stroke-width: 2.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ring.net { stroke: var(--net); stroke-width: 2px; }
+.ring.cur { stroke-width: 4px; }
+@media (prefers-reduced-motion: no-preference) { .ring { animation: pulse 1.6s ease-in-out infinite; } }
+@keyframes pulse { 50% { stroke-opacity: .35; } }
+.lbl { font-family: var(--font-mono); fill: var(--fg); text-anchor: middle; dominant-baseline: central; pointer-events: none; paint-order: stroke; stroke: var(--board); }
+.lbl.hi { fill: var(--accent); font-weight: 600; }
+.lbl.dnp { fill: var(--muted); }
+.dim .lbl:not(.hi) { opacity: .3; }
+.pinmode .lbl { opacity: .45; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.card { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px var(--shadow); display: grid; gap: 4px; font-size: 13px; cursor: auto; max-width: 540px; max-height: 48%; overflow-y: auto; }
+.card .row1 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding-right: 20px; }
+.card .ref { font-family: var(--font-mono); font-weight: 600; font-size: 18px; color: var(--accent); }
+.card .nm { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.card .fn { color: var(--muted); overflow-wrap: anywhere; }
+.card .orient { color: var(--pin1); font-weight: 500; }
+.card .nets { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.card .acts { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
+.card .x { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; font-size: 16px; color: var(--muted); }
+.pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 8px; font-family: var(--font-mono); font-size: 12px; margin-top: 2px; }
+.pins button, .nchips button { font: inherit; text-align: left; border: 0; background: transparent; padding: 1px 4px; border-radius: 3px; cursor: pointer; overflow-wrap: anywhere; }
+.pins button:hover, .nchips button:hover { background: var(--accent-soft); }
+.pins button.on { background: var(--accent-soft); }
+.pins b, .nchips b { color: var(--pin1); font-weight: 600; }
+.nchips { display: flex; flex-wrap: wrap; gap: 2px 4px; font-family: var(--font-mono); font-size: 12px; }
+.netname { font-family: var(--font-mono); font-weight: 600; color: var(--net); font-size: 15px; overflow-wrap: anywhere; }
+.side { display: grid; gap: 14px; min-width: 0; }
+.summary { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.summary .nums { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); }
+.summary .nums b { color: var(--fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.summary .src { font-size: 12px; color: var(--muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--done); width: 0; transition: width .3s; }
+.search { display: flex; gap: 8px; }
+.search input { flex: 1; min-width: 0; font: inherit; font-family: var(--font-mono); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.step { display: grid; gap: 6px; }
+.step h2 { margin: 6px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 16px; display: flex; gap: 10px; align-items: baseline; text-wrap: balance; }
+.step h2 .no { font-family: var(--font-mono); font-size: 12px; color: var(--bg); background: var(--fg); border-radius: 4px; padding: 1px 6px; }
+.step > p { margin: 0 0 2px; color: var(--muted); font-size: 12.5px; max-width: 65ch; }
+.grp { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 9px 11px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; cursor: pointer; }
+.grp:hover { border-color: var(--muted); }
+.grp.sel { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.grp.alldone .gname { text-decoration: line-through; color: var(--muted); }
+.grp input[type=checkbox] { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--done); cursor: pointer; }
+.gname { font-weight: 600; overflow-wrap: anywhere; }
+.gcount { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.gmeta { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); align-items: center; }
+.chip { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; overflow-wrap: anywhere; }
+.pol { color: var(--pin1); border-color: currentColor; }
+.note { grid-column: 2 / 4; font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 2px 7px; }
+.refs { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; }
+.refs button { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); background: var(--bg); border-radius: 4px; padding: 1px 6px; cursor: pointer; }
+.refs button.d { color: var(--done); border-color: var(--done); }
+.refs button.c { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.tps { display: flex; flex-wrap: wrap; gap: 6px; }
+.tps button { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.tps button span { color: var(--net); }
+.foot { color: var(--muted); font-size: 12px; max-width: 70ch; display: grid; gap: 6px; }
+.foot p { margin: 0; }
+kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); color: var(--fg); }
+/* empty state */
+.empty { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .empty { grid-template-columns: minmax(0, 1fr); } }
+.drop { border: 2px dashed var(--muted); border-radius: 12px; background: var(--panel); padding: 32px 24px; display: grid; gap: 14px; justify-items: start; align-content: center; min-height: 300px; }
+.drop h2 { font-family: var(--font-display); font-size: 22px; margin: 0; text-wrap: balance; }
+.drop p { margin: 0; color: var(--muted); max-width: 56ch; }
+.drop.over, .dropmask.over { border-color: var(--accent); background: var(--accent-soft); }
+.howto { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+.howto h3 { margin: 0; font-family: var(--font-display); font-size: 16px; }
+.howto ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: 13px; }
+.howto code { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
+.dropmask { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--accent-soft); border: 3px dashed var(--accent); font-family: var(--font-display); font-size: 22px; color: var(--accent); pointer-events: none; backdrop-filter: blur(2px); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px)); box-shadow: 0 6px 24px var(--shadow); white-space: pre-line; }
+</style>
+
+<input type="file" id="inDir" webkitdirectory directory multiple hidden>
+<input type="file" id="inFiles" multiple accept=".kicad_pcb,.csv,.zip" hidden>
+
+<div class="top">
+  <div class="brand">
+    <h1>KiCad 焊接导航</h1>
+    <p>拖入 KiCad 工程文件夹，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。文件只在你的浏览器里解析，不会上传。</p>
+  </div>
+  <div class="tabs" role="tablist" id="tabs" hidden></div>
+</div>
+
+<section class="empty" id="empty">
+  <div class="drop" id="drop">
+    <h2>把工程文件夹拖到这里</h2>
+    <p>会自动找出里面所有的 <code>.kicad_pcb</code>，同一目录下文件名带 “bom” 的 CSV 会自动当作 BOM 合并（嘉立创 BOM、KiCad 导出的 BOM 都行）。也可以直接拖 zip 压缩包。</p>
+    <div class="row">
+      <button type="button" class="tbtn primary" id="pickDir">选择文件夹</button>
+      <button type="button" class="tbtn" id="pickFiles">选择文件 / zip</button>
+      <button type="button" class="tbtn" id="loadDemo">打开示例板</button>
+    </div>
+    <p class="hint" id="loadMsg"></p>
+  </div>
+  <div class="howto">
+    <h3>能读什么</h3>
+    <ul>
+      <li>KiCad 6 ~ 10 的 <code>.kicad_pcb</code>：器件位置、焊盘形状、网络、走线、板框、丝印框</li>
+      <li>器件属性：Value、LCSC / MPN 字段、DNP、不进 BOM、所属原理图页</li>
+      <li>可选 BOM：带 <code>Designator</code> / <code>Reference</code> 列的 CSV，用 Comment、LCSC 列补全名称和料号</li>
+      <li>zip 里的工程也能读（需要联网加载解压库）</li>
+    </ul>
+    <h3>读进来以后</h3>
+    <ul>
+      <li>按焊接顺序分步：细间距芯片 → 小封装 → 阻容 → 有极性件 → 大件 → 开关 → 底面 → 插件</li>
+      <li>标出 1 脚、二极管阴极、电解/钽电容正极，并用文字说出朝哪边</li>
+      <li>“测引脚”模式：点任意焊盘看是哪个器件第几脚、接什么网络、和哪些点应导通</li>
+      <li>勾选进度和读入的板子保存在本机浏览器，下次打开还在</li>
+    </ul>
+  </div>
+</section>
+
+<div class="grid" id="app" hidden>
+  <section class="stage">
+    <div class="toolbar">
+      <div class="seg" id="modeSeg">
+        <button type="button" data-mode="solder" aria-pressed="true">焊接</button>
+        <button type="button" data-mode="pin" aria-pressed="false">测引脚</button>
+      </div>
+      <div class="seg" id="sideSeg">
+        <button type="button" data-side="F" aria-pressed="true">顶面</button>
+        <button type="button" data-side="B" aria-pressed="false">底面（镜像）</button>
+      </div>
+      <button type="button" class="tbtn" id="rotBtn" title="旋转 90°（R）">⟳ 0°</button>
+      <select class="tbtn" id="lblSel" aria-label="板上标注">
+        <option value="ref">标位号</option>
+        <option value="val">标值</option>
+        <option value="none">不标注</option>
+      </select>
+      <button type="button" class="tbtn" id="trkBtn" aria-pressed="true">走线</button>
+      <span class="spacer"></span>
+      <button type="button" class="tbtn" id="zin" aria-label="放大">＋</button>
+      <button type="button" class="tbtn" id="zout" aria-label="缩小">－</button>
+      <button type="button" class="tbtn" id="zfit">全板</button>
+      <button type="button" class="tbtn" id="zsel">缩放到选中</button>
+    </div>
+    <div class="toolbar">
+      <button type="button" class="tbtn" id="prevBtn" title="上一种（[）">◀ 上一种</button>
+      <button type="button" class="tbtn primary" id="nextBtn" title="下一种未焊完的（N）">下一种 ▶</button>
+      <button type="button" class="tbtn" id="doneNext" title="当前这种全部标记已焊，跳到下一种（空格）">✓ 焊完这种</button>
+      <span class="spacer"></span>
+      <span class="hint" id="hint">滚轮/双指缩放 · 拖动平移</span>
+    </div>
+    <div class="svgwrap" id="wrap">
+      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="card" id="card" hidden></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--pad)"></i>焊盘</span>
+      <span><i style="background:var(--accent)"></i>当前要焊</span>
+      <span><i style="background:var(--pin1)"></i>1 脚 / 阴极 K / 正极 +</span>
+      <span><i style="background:var(--done)"></i>已焊</span>
+      <span><i style="background:var(--net)"></i>同网络（测引脚）</span>
+      <span><i style="border:1px dashed var(--muted)"></i>DNP 不焊</span>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="summary">
+      <div class="nums" id="nums"></div>
+      <div class="bar"><span id="bar"></span></div>
+      <div class="src" id="src"></div>
+      <div class="search">
+        <input id="q" type="search" placeholder="位号 C14 / 引脚 U1.23 / 网络 GND" autocomplete="off">
+        <button type="button" class="tbtn" id="clr">清除</button>
+      </div>
+      <div class="row">
+        <button type="button" class="tbtn" id="copyBom">复制分步 BOM</button>
+        <button type="button" class="tbtn" id="resetProg">清空进度</button>
+        <button type="button" class="tbtn" id="rmBoard">移除这块板</button>
+      </div>
+    </div>
+    <section class="step" id="tpSec" hidden>
+      <h2>测试点与引脚</h2>
+      <p>点板上任意焊盘：卡片显示它是哪个器件第几脚、接哪个网络，同网络的其他焊盘标成紫色。万用表通断档一支表笔放在选中焊盘，另一支放任一紫色焊盘应导通。</p>
+      <div class="tps" id="tps"></div>
+    </section>
+    <div id="steps" class="side"></div>
+    <div class="foot">
+      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
+      <p>极性按 KiCad / 立创封装惯例判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
+      <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
+    </div>
+  </aside>
+</div>
+
+<div class="dropmask" id="dropmask" hidden>松开鼠标，读入文件</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/*PARSER-START*/
+const KiPCB = (() => {
+  // ---------- S-expression reader ----------
+  function sexpr(src) {
+    let i = 0, cur = null, root = null; const n = src.length, stack = [];
+    while (i < n) {
+      const c = src.charCodeAt(i);
+      if (c === 40) { const node = []; if (cur) cur.push(node); stack.push(cur); cur = node; i++; }
+      else if (c === 41) { const done = cur; cur = stack.pop(); if (!cur && !root) root = done; i++; }
+      else if (c <= 32) i++;
+      else if (c === 34) {
+        let j = i + 1, s = "", st = j;
+        while (j < n) { const d = src.charCodeAt(j); if (d === 92) { s += src.slice(st, j); const e = src[j + 1]; s += e === "n" ? "\n" : e; j += 2; st = j; } else if (d === 34) break; else j++; }
+        s += src.slice(st, j); if (cur) cur.push(s); i = j + 1;
+      } else { let j = i; while (j < n) { const d = src.charCodeAt(j); if (d <= 32 || d === 40 || d === 41) break; j++; } if (cur) cur.push(src.slice(i, j)); i = j; }
+    }
+    return root;
+  }
+  const isA = Array.isArray;
+  const kid = (n, k) => n && n.find(x => isA(x) && x[0] === k);
+  const kids = (n, k) => n ? n.filter(x => isA(x) && x[0] === k) : [];
+  const N = v => +v;
+  const XY = (n, k) => { const c = kid(n, k); return c ? [N(c[1]), N(c[2])] : null; };
+  const rot = (x, y, deg) => { if (!deg) return [x, y]; const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [x * c + y * s, -x * s + y * c]; };
+  const f3 = v => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? 0 : r; };
+  const P = p => f3(p[0]) + " " + f3(p[1]);
+  const polyD = pts => "M" + pts.map(P).join("L") + "Z";
+  const circ = (cx, cy, r, n = 24) => Array.from({ length: n }, (_, k) => [cx + r * Math.cos(k * 2 * Math.PI / n), cy + r * Math.sin(k * 2 * Math.PI / n)]);
+  function arcD(a, m, b) {
+    const [x1, y1] = a, [x2, y2] = m, [x3, y3] = b;
+    const d = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+    if (Math.abs(d) < 1e-9) return `M${P(a)}L${P(b)}`;
+    const ux = ((x1 * x1 + y1 * y1) * (y2 - y3) + (x2 * x2 + y2 * y2) * (y3 - y1) + (x3 * x3 + y3 * y3) * (y1 - y2)) / d;
+    const uy = ((x1 * x1 + y1 * y1) * (x3 - x2) + (x2 * x2 + y2 * y2) * (x1 - x3) + (x3 * x3 + y3 * y3) * (x2 - x1)) / d;
+    const r = Math.hypot(x1 - ux, y1 - uy);
+    const sweep = ((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)) > 0 ? 1 : 0;
+    const t = q => Math.atan2(q[1] - uy, q[0] - ux), TAU = 2 * Math.PI, nm = v => ((v % TAU) + TAU) % TAU;
+    const span = sweep ? nm(t(b) - t(a)) : nm(t(a) - t(b));
+    return `M${P(a)}A${f3(r)} ${f3(r)} 0 ${span > Math.PI ? 1 : 0} ${sweep} ${P(b)}`;
+  }
+  const strokeW = n => { const s = kid(n, "stroke"); const w = s ? kid(s, "width") : kid(n, "width"); return w ? N(w[1]) : 0.1; };
+  const layerOf = n => { const l = kid(n, "layer"); return l ? l[1] : ""; };
+
+  // graphic item -> {d, pts, layer}; T maps local -> board
+  function gfx(n, T) {
+    const t = n[0].replace(/^(gr|fp)_/, ""); let d = ""; const pts = [];
+    if (t === "line") { const s = XY(n, "start"), e = XY(n, "end"); if (s && e) { const a = T(s), b = T(e); d = `M${P(a)}L${P(b)}`; pts.push(a, b); } }
+    else if (t === "rect") { const s = XY(n, "start"), e = XY(n, "end"); if (s && e) { const c = [[s[0], s[1]], [e[0], s[1]], [e[0], e[1]], [s[0], e[1]]].map(T); d = polyD(c); pts.push(...c); } }
+    else if (t === "circle") { const cc = XY(n, "center"), ee = XY(n, "end"); if (cc && ee) { const c = T(cc), e = T(ee), r = Math.hypot(e[0] - c[0], e[1] - c[1]);
+      d = `M${P([c[0] - r, c[1]])}a${f3(r)} ${f3(r)} 0 1 0 ${f3(2 * r)} 0a${f3(r)} ${f3(r)} 0 1 0 ${f3(-2 * r)} 0`; pts.push([c[0] - r, c[1] - r], [c[0] + r, c[1] + r]); } }
+    else if (t === "arc") { const s = XY(n, "start"), m = XY(n, "mid"), e = XY(n, "end"); if (s && e) { const a = T(s), b = T(e); if (m) { const mm = T(m); d = arcD(a, mm, b); pts.push(a, mm, b); } else { d = `M${P(a)}L${P(b)}`; pts.push(a, b); } } }
+    else if (t === "poly") { const c = kids(kid(n, "pts"), "xy").map(q => T([N(q[1]), N(q[2])])); if (c.length) { d = polyD(c); pts.push(...c); } }
+    else if (t === "curve") { const c = kids(kid(n, "pts"), "xy").map(q => T([N(q[1]), N(q[2])])); if (c.length === 4) { d = `M${P(c[0])}C${P(c[1])} ${P(c[2])} ${P(c[3])}`; pts.push(...c); } }
+    return { d, pts, layer: layerOf(n), w: strokeW(n) };
+  }
+
+  // ---------- pad geometry (pad-local, unrotated) ----------
+  function rrect(w, h, r, seg = 4) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); if (r < 1e-4) return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
+    const out = [], cs = [[w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, 90], [-w / 2 + r, -h / 2 + r, 180], [w / 2 - r, -h / 2 + r, 270]];
+    for (const [cx, cy, a0] of cs) for (let k = 0; k <= seg; k++) { const a = (a0 + 90 * k / seg) * Math.PI / 180; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  function chamfered(w, h, c, corners) {
+    const has = k => corners.includes(k), x = w / 2, y = h / 2, o = [];
+    if (has("top_left")) o.push([-x, -y + c], [-x + c, -y]); else o.push([-x, -y]);
+    if (has("top_right")) o.push([x - c, -y], [x, -y + c]); else o.push([x, -y]);
+    if (has("bottom_right")) o.push([x, y - c], [x - c, y]); else o.push([x, y]);
+    if (has("bottom_left")) o.push([-x + c, y], [-x, y - c]); else o.push([-x, y]);
+    return o;
+  }
+  function baseShape(shape, w, h, pad) {
+    if (shape === "circle") return circ(0, 0, w / 2);
+    if (shape === "oval") return rrect(w, h, Math.min(w, h) / 2, 6);
+    if (shape === "roundrect") { const rr = kid(pad, "roundrect_rratio"); return rrect(w, h, Math.min(w, h) * (rr ? N(rr[1]) : .25)); }
+    if (shape === "chamfered_rect" || kid(pad, "chamfer")) { const cr = kid(pad, "chamfer_ratio"), ch = kid(pad, "chamfer"); return chamfered(w, h, Math.min(w, h) * (cr ? N(cr[1]) : .2), ch ? ch.slice(1) : []); }
+    if (shape === "trapezoid") { const dl = XY(pad, "rect_delta") || [0, 0], dx = w / 2, dy = h / 2, ddx = dl[0] / 2, ddy = dl[1] / 2;
+      return [[-dx - ddy, dy + ddx], [dx + ddy, dy - ddx], [dx - ddy, -dy + ddx], [-dx + ddy, -dy - ddx]]; }
+    return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
+  }
+  function customPolys(pad, w, h) {
+    const opt = kid(pad, "options"), anc = opt && kid(opt, "anchor"), polys = [baseShape(anc && anc[1] === "circle" ? "circle" : "rect", w, h, pad)];
+    for (const g of (kid(pad, "primitives") || []).slice(1)) {
+      if (!isA(g)) continue; const t = g[0].replace(/^gr_/, ""), sw = strokeW(g);
+      if (t === "poly") { const c = kids(kid(g, "pts"), "xy").map(q => [N(q[1]), N(q[2])]); if (c.length > 2) polys.push(c); }
+      else if (t === "circle") { const c = XY(g, "center"), e = XY(g, "end"); if (c && e) polys.push(circ(c[0], c[1], Math.hypot(e[0] - c[0], e[1] - c[1]) + sw / 2)); }
+      else if (t === "rect") { const s = XY(g, "start"), e = XY(g, "end"); if (s && e) polys.push([[s[0], s[1]], [e[0], s[1]], [e[0], e[1]], [s[0], e[1]]]); }
+      else if (t === "line") { const s = XY(g, "start"), e = XY(g, "end"); if (s && e) { const L = Math.hypot(e[0] - s[0], e[1] - s[1]) || 1e-6, nx = -(e[1] - s[1]) / L * sw / 2, ny = (e[0] - s[0]) / L * sw / 2;
+        polys.push([[s[0] + nx, s[1] + ny], [e[0] + nx, e[1] + ny], [e[0] - nx, e[1] - ny], [s[0] - nx, s[1] - ny]]); } }
+    }
+    return polys;
+  }
+
+  function parse(text, fileName) {
+    const t0 = text.trimStart();
+    if (t0.startsWith("(kicad_pcb") === false) throw new Error("不是 KiCad PCB 文件");
+    const root = sexpr(text);
+    if (!root || root[0] !== "kicad_pcb") throw new Error("文件结构无法识别");
+    const ver = +((kid(root, "version") || [])[1] || 0);
+    if (kids(root, "module").length && !kids(root, "footprint").length) throw new Error("这是 KiCad 5 格式，请用 KiCad 6 以上打开后另存再导入");
+    const netTable = {};
+    for (const n of kids(root, "net")) if (n.length >= 3) netTable[n[1]] = n[2];
+    const hasTable = Object.keys(netTable).length > 0;
+    const netName = nn => { if (!nn) return ""; if (nn.length >= 3) return nn[2]; const v = nn[1] ?? ""; return hasTable && v in netTable ? netTable[v] : v; };
+    const tb = kid(root, "title_block"), title = tb && kid(tb, "title") ? kid(tb, "title")[1] : "";
+
+    const edges = [], ep = [], silk = { F: [], B: [] };
+    const I = p => p;
+    for (const n of root) {
+      if (!isA(n) || !/^gr_(line|arc|circle|rect|poly|curve)$/.test(n[0])) continue;
+      const g = gfx(n, I); if (!g.d) continue;
+      if (g.layer === "Edge.Cuts") { edges.push(g.d); ep.push(...g.pts); }
+      else if (g.layer === "F.SilkS") silk.F.push(g.d); else if (g.layer === "B.SilkS") silk.B.push(g.d);
+    }
+    const tracks = { F: {}, B: {} }, vias = [];
+    for (const n of root) {
+      if (!isA(n)) continue;
+      if (n[0] === "segment" || n[0] === "arc") {
+        const L = layerOf(n), side = L === "F.Cu" ? "F" : L === "B.Cu" ? "B" : null; if (!side) continue;
+        const s = XY(n, "start"), e = XY(n, "end"), w = f3(N((kid(n, "width") || [0, .2])[1])), m = XY(n, "mid");
+        (tracks[side][w] ||= []).push(n[0] === "arc" && m ? arcD(s, m, e) : `M${P(s)}L${P(e)}`);
+      } else if (n[0] === "via") { const a = XY(n, "at"), sz = N((kid(n, "size") || [0, .6])[1]); if (a) vias.push([f3(a[0]), f3(a[1]), f3(sz / 2)]); }
+    }
+
+    const parts = [];
+    for (const fp of kids(root, "footprint")) {
+      const at = kid(fp, "at") || ["at", 0, 0, 0], fx = N(at[1]), fy = N(at[2]), fa = N(at[3] || 0);
+      const T = p => { const r = rot(p[0], p[1], fa); return [fx + r[0], fy + r[1]]; };
+      const side = layerOf(fp) === "B.Cu" ? "B" : "F";
+      const props = {};
+      for (const p of kids(fp, "property")) props[p[1]] = p[2] ?? "";
+      for (const t of kids(fp, "fp_text")) { if (t[1] === "reference" && !props.Reference) props.Reference = t[2]; if (t[1] === "value" && !props.Value) props.Value = t[2]; }
+      const attr = (kid(fp, "attr") || []).slice(1);
+      const flag = k => attr.includes(k) || ((kid(fp, k) || [])[1] === "yes");
+      const ref = props.Reference || "?", libName = String(fp[1] || ""), fpName = libName.includes(":") ? libName.split(":").pop() : libName;
+      const sheet = (kid(fp, "sheetname") || [])[1] || props.Sheetname || "";
+      const body = [], sk = [], crt = [], bpts = [];
+      for (const n of fp) {
+        if (!isA(n) || !/^fp_(line|arc|circle|rect|poly|curve)$/.test(n[0])) continue;
+        const g = gfx(n, T); if (!g.d) continue;
+        if (/\.Fab$/.test(g.layer)) { body.push(g.d); bpts.push(...g.pts); }
+        else if (/\.SilkS$/.test(g.layer)) sk.push(g.d);
+        else if (/\.CrtYd$/.test(g.layer)) crt.push(...g.pts);
+        else if (g.layer === "Edge.Cuts") { edges.push(g.d); ep.push(...g.pts); }
+      }
+      const cuSide = side === "B" ? "B.Cu" : "F.Cu";
+      const pads = []; let pin1 = null; const ppts = [];
+      for (const pad of kids(fp, "pad")) {
+        const num = String(pad[1] ?? ""), type = pad[2], shape = pad[3];
+        const layers = (kid(pad, "layers") || []).slice(1);
+        const th = type === "thru_hole", npth = type === "np_thru_hole";
+        const onCu = layers.some(l => l === cuSide || l === "*.Cu" || l === "F&B.Cu");
+        if (!onCu && !th && !npth) continue;
+        const pa = kid(pad, "at") || ["at", 0, 0, 0], pang = N(pa[3] || 0);
+        const c = T([N(pa[1]), N(pa[2])]);
+        const sz = kid(pad, "size") || ["size", .5, .5], w = N(sz[1]), h = N(sz[2] ?? sz[1]);
+        const local = shape === "custom" ? customPolys(pad, w, h) : [baseShape(shape, w, h, pad)];
+        const toB = q => { const r = rot(q[0], q[1], pang); return [c[0] + r[0], c[1] + r[1]]; };
+        const polys = local.map(o => o.map(toB));
+        let d = polys.map(polyD).join("");
+        const dr = kid(pad, "drill");
+        if (dr && (th || npth)) {
+          const oval = dr[1] === "oval", dw = N(oval ? dr[2] : dr[1]), dh = N(oval ? (dr[3] ?? dr[2]) : dr[1]);
+          if (dw > 0) { const hole = (oval ? rrect(dw, dh, Math.min(dw, dh) / 2, 6) : circ(0, 0, dw / 2, 20)).map(toB); d += polyD(hole.slice().reverse()); }
+        }
+        const all = polys.flat(); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        for (const q of all) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+        ppts.push([x0, y0], [x1, y1]);
+        const netN = kid(pad, "net");
+        pads.push([num, npth ? "" : netName(netN), d, th ? 1 : npth ? 2 : 0, f3(c[0]), f3(c[1]), f3(Math.min(x1 - x0, y1 - y0))]);
+        if (num === "1" && !pin1) pin1 = [f3(c[0]), f3(c[1])];
+      }
+      const bbSrc = crt.length ? crt : ppts.concat(bpts);
+      let bb = [fx - .5, fy - .5, fx + .5, fy + .5];
+      if (bbSrc.length) { bb = [1e9, 1e9, -1e9, -1e9]; for (const q of bbSrc) { bb[0] = Math.min(bb[0], q[0]); bb[1] = Math.min(bb[1], q[1]); bb[2] = Math.max(bb[2], q[0]); bb[3] = Math.max(bb[3], q[1]); } bb = bb.map(f3); }
+      const attrTHT = attr.includes("through_hole") || (!attr.includes("smd") && pads.some(p => p[3] === 1));
+      parts.push({
+        r: ref, s: side, c: [f3(fx), f3(fy)], rot: fa, bb, pads, body: body.join(""), silk: sk.join(""),
+        val: props.Value || "", fp: fpName, props, sheet, p1: pin1,
+        tht: attrTHT ? 1 : 0, dnp: flag("dnp") ? 1 : 0, nobom: flag("exclude_from_bom") || attr.includes("board_only") ? 1 : 0,
+      });
+    }
+    let bbox;
+    const pts = ep.length ? ep : parts.flatMap(p => [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]);
+    if (pts.length) { bbox = [1e9, 1e9, -1e9, -1e9]; for (const q of pts) { bbox[0] = Math.min(bbox[0], q[0]); bbox[1] = Math.min(bbox[1], q[1]); bbox[2] = Math.max(bbox[2], q[0]); bbox[3] = Math.max(bbox[3], q[1]); } bbox = bbox.map(f3); }
+    else bbox = [0, 0, 50, 50];
+    const tr = s => Object.entries(tracks[s]).map(([w, a]) => [w, a.join("")]);
+    return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: tr("F"), B: tr("B") }, vias, parts };
+  }
+
+  // ---------- CSV / BOM ----------
+  function csv(text) {
+    const rows = []; let row = [], f = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === "," || c === "\t" || c === ";") { row.push(f); f = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+      else f += c;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows.filter(r => r.some(x => x.trim()));
+  }
+  function bom(text) {
+    const rows = csv(text.replace(/^﻿/, ""));
+    for (let h = 0; h < Math.min(6, rows.length); h++) {
+      const H = rows[h].map(x => x.trim().toLowerCase());
+      const di = H.findIndex(x => /^(designators?|references?|refs?|refdes|位号|标号)$/.test(x));
+      if (di < 0) continue;
+      let ci = H.findIndex(x => /^(comment|名称|注释)$/.test(x)); if (ci < 0) ci = H.findIndex(x => /^(value|值|description)$/.test(x));
+      const li = H.findIndex(x => /lcsc|jlcpcb part|^jlc|立创/.test(x));
+      const mi = H.findIndex(x => /^(mpn|manufacturer part|manufacturer_part_number|partnumber|part number|型号|料号)/.test(x));
+      const fi = H.findIndex(x => /^(footprint|封装|package)$/.test(x));
+      if (ci < 0 && li < 0 && mi < 0) return null;   // e.g. a CPL / position file
+      const map = {};
+      for (const r of rows.slice(h + 1)) {
+        for (const d of (r[di] || "").split(/[,\s;]+/).filter(Boolean)) map[d.trim()] = { comment: ci >= 0 ? (r[ci] || "").trim() : "", lcsc: li >= 0 ? (r[li] || "").trim() : "", mpn: mi >= 0 ? (r[mi] || "").trim() : "", fp: fi >= 0 ? (r[fi] || "").trim() : "" };
+      }
+      return Object.keys(map).length ? map : null;
+    }
+    return null;
+  }
+  return { parse, bom, csv };
+})();
+/*PARSER-END*/
+
+/*ENRICH-START*/
+const Enrich = (() => {
+  const STEPS = {
+    1: ["细间距芯片 / 连接器", "QFN、DFN、LGA、BGA、QFP、TSSOP、FPC/Type-C 座。先焊，周围空旷好操作。锡膏 + 热风枪或加热台，认准 1 脚。"],
+    2: ["三极管 / MOS / 晶振 / SOIC", "SOT、SOIC、SOP、晶振、功率封装。认准 1 脚；4 脚晶振转 90° 会把晶体脚接到地。"],
+    3: ["0201 / 0402 阻容感", "最小的被动件，无极性。一种值焊完再换下一种，避免混料。"],
+    4: ["0603 阻容感", "无极性。"],
+    5: ["有极性器件", "二极管、LED、电解/钽电容。按卡片里的方向提示放，焊前对一下丝印。双向 TVS 无极性。"],
+    6: ["0805 及以上 / 电感 / 其他贴片", "体积较大，散热快，烙铁温度可适当调高。"],
+    7: ["按键 / 开关 / 电池座 / 其他机械件", "塑料件怕热，放在贴片最后快速焊完。"],
+    8: ["底面贴片", "顶面焊完再翻面焊。翻面时垫高，别压到顶面器件。"],
+    9: ["插件（最后焊）", "排针、排母、端子、编码器等。从元件面插入，另一面焊接。"],
+  };
+  const FINE = /QFN|DFN|LGA|BGA|WSON|VSON|USON|XSON|TSON|(^|[^A-Z])SON|QFP|TSSOP|MSOP|SSOP|CSP|LQFN|VQFN|FH\d|FPC|FFC|USB[_-]?C|Type-?C|P0\.[345]\d*mm/i;
+  const MID = /SOT|SOIC|(^|_)SOP|ESOP|HSOP|SC-?70|SC-?88|Crystal|Oscillator|TO-2|DPAK|D2PAK|PowerPAK|SMA|SMB|SMC|MELF/i;
+  const pkg = fp => (fp.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1] || "";
+  const isTP = p => /^TP\d/i.test(p.r) || /TestPoint/i.test(p.fp);
+  const nothing = p => p.r.startsWith("#") || /Fiducial|MountingHole|Logo|NetTie/i.test(p.fp) || !p.pads.some(q => q[3] !== 2);
+  const lcscOf = p => p.props.LCSC || p.props["LCSC Part"] || p.props["LCSC Part #"] || p.props["JLCPCB Part #"] || p.props.lcsc_id || p.props["LCSC#"] || "";
+  function prettyFp(fp) {
+    let m = fp.match(/Pin(Header|Socket)_(\d+)x(\d+)_P([\d.]+)mm_(\w+)/);
+    if (m) return `${m[1] === "Header" ? "排针" : "排母"} ${m[2]}×${+m[3]} ${m[4]}mm ${/^Horiz/.test(m[5]) ? "弯" : "直"}`;
+    if (/RotaryEncoder/i.test(fp)) return "旋转编码器 " + (fp.match(/EC\d+\w*/) || [""])[0];
+    if (/Potentiometer/i.test(fp)) return "电位器 " + (fp.match(/RK\d+\w*|3296\w*|RV\d+\w*/) || [""])[0];
+    if (/TerminalBlock/i.test(fp)) return "接线端子 " + ((fp.match(/1x(\d+)/) || [])[1] ? fp.match(/1x(\d+)/)[1] + "P" : "");
+    if (/USB/i.test(fp)) return fp.replace(/_/g, " ");
+    return fp;
+  }
+  const mpnOf = p => p.props.MPN || p.props.Partnumber || p.props["Manufacturer_Part_Number"] || p.props["Manufacturer Part Number"] || p.props.PN || "";
+
+  function polarity(p, name) {
+    const r = p.r.toUpperCase(), fp = p.fp;
+    if (/^(D|LED|ZD|TVS|VD)\d/.test(r) || /^LED/.test(r)) {
+      if (/-BI\b|_BI\b|Bidir/i.test(fp) || /\d(\.\d)?C?A\b/.test(name) && /^(SM|P\d|ESD|TVS)/i.test(name)) return "none-bi";
+      return p.pads.filter(q => q[3] !== 2).length >= 2 ? "k1" : "";
+    }
+    if (/^C\d/.test(r) && /CP_|Elec|Tantal|CASE-[A-E]|_Pol|POL/i.test(fp + " " + name)) return "plus1";
+    if (/^(BT|BAT|BZ|LS)\d/.test(r)) return "plus1";
+    if (/^(U|IC|Q|VT|T\d|Y|X|OSC|MOD)/.test(r)) return p.pads.filter(q => q[3] !== 2).length > 2 ? "pin1" : "";
+    if (/^(J|P|CN|CON|USB|FPC)\d/.test(r) && !p.tht && FINE.test(fp)) return "pin1";
+    return "";
+  }
+  function step(p) {
+    if (p.tht) return 9;
+    if (p.s === "B") return 8;
+    const r = p.r.toUpperCase(), fp = p.fp;
+    if (FINE.test(fp)) return 1;
+    if (/^(D|LED|ZD|TVS|VD)\d/.test(r) || /^LED/.test(r) || p.pol === "plus1") return 5;
+    if (MID.test(fp) && !/^(R|C|L|FB)\d/.test(r)) return 2;
+    if (/^(SW|K|S|BT|BAT|BZ|RV|VR|ENC)\d/.test(r)) return 7;
+    const k = pkg(fp);
+    if (/^(R|C|L|FB|RN|CN)\d/.test(r) || k) {
+      if (k === "01005" || k === "0201" || k === "0402") return 3;
+      if (k === "0603") return 4;
+      return 6;
+    }
+    if (/^(J|P|CN|CON|USB)\d/.test(r)) return 7;
+    return 6;
+  }
+  const ROLE = [
+    [/(^|[._\[])dec/, "去耦"], [/c_in\b|c_in\[/, "输入电容"], [/c_out_bulk/, "输出储能"], [/c_out/, "输出电容"], [/c_vm_hf/, "电机电源高频去耦"],
+    [/c_vm/, "电机电源电容"], [/c_vcc/, "逻辑电源电容"], [/c_aux/, "VAUX 电容"], [/fb_top/, "反馈分压(上)"], [/fb_bot/, "反馈分压(下)"],
+    [/r_top/, "分压(上)"], [/r_bot/, "分压(下)"], [/r_mid/, "分压(中)"], [/c_x/, "晶振负载电容"], [/xtal|crystal/, "晶振"], [/\bmcu\b/, "MCU"],
+    [/flash/, "Flash"], [/nrst|reset/, "复位"], [/boot/, "BOOT"], [/vdda/, "模拟电源去耦"], [/(^|\.)l$/, "电感"], [/q_p\b/, "P-MOS 开关"],
+    [/q_n\b/, "N-MOS 驱动"], [/enable_pulldown/, "使能下拉"], [/gate_pullup/, "栅极上拉"], [/pullup|r_pu\b/, "上拉"], [/pulldown|r_pd/, "下拉"],
+    [/tvs/, "TVS 保护"], [/esd/, "ESD 保护"], [/r_led|led/, "LED"], [/r_d[mp]\b/, "USB 串阻"], [/sense/, "采样"], [/bulk/, "储能电容"],
+    [/r_chain/, "梯形电阻链"], [/r_leg/, "支路电阻"], [/r_term/, "终端电阻"], [/\.sw\b|\.sw\[/, "按键/开关"], [/\.enc$/, "编码器"], [/\.pot$/, "电位器"],
+    [/\.jp$/, "跳线"], [/\.j$/, "接口"], [/\.u$/, "芯片"], [/imu/, "IMU"], [/charger/, "充电"], [/buck|boost/, "DC-DC"], [/efuse/, "电子保险丝"],
+  ];
+  function fnOf(p) {
+    const addr = p.props.atopile_address || "";
+    const out = [];
+    if (addr) {
+      const role = (ROLE.find(([re]) => re.test(addr.toLowerCase())) || [])[1];
+      out.push(role ? `${role}（${addr}）` : addr);
+    }
+    if (p.sheet && p.sheet !== "/") out.push("原理图页 " + p.sheet);
+    const desc = p.props.Description || p.props.description || "";
+    if (desc && desc.length < 80) out.push(desc);
+    return out.join(" · ");
+  }
+  const natkey = r => { const m = String(r).match(/^([A-Za-z_#]+)(\d+)(.*)$/); return m ? [m[1].toUpperCase(), +m[2], m[3]] : [String(r), 0, ""]; };
+  const natcmp = (a, b) => { const x = natkey(a), y = natkey(b); return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] - y[1] || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0); };
+
+  // board = parsed board; bomMap = { ref: {comment,lcsc,mpn} } or null
+  function enrich(board, bomMap) {
+    const groups = new Map(), dnp = [];
+    for (const p of board.parts) {
+      const b = bomMap && bomMap[p.r];
+      const mpn = (b && b.mpn) || mpnOf(p), lcsc = (b && b.lcsc) || lcscOf(p);
+      let nm = (b && b.comment) || (p.val && p.val !== "~" ? p.val : "") || mpn || prettyFp(p.fp);
+      if (p.val && mpn && !(b && b.comment) && !nm.includes(mpn) && /^(U|IC|Q|D|Y|X)/.test(p.r)) nm = p.val === "~" ? mpn : `${p.val}`;
+      let note = "";
+      const m = nm.match(/[（(]([^()（）]*?(需|缺货|确认|DNP|不贴|注意|自供|代购)[^()（）]*)[)）]/);
+      if (m) { note = m[1]; nm = nm.replace(m[0], "").trim() || nm; }
+      p.nm = nm; p.lcsc = lcsc; p.mpn = mpn; p.note = note;
+      p.tp = isTP(p) ? 1 : 0;
+      p.skip = (p.tp || p.nobom || nothing(p)) ? 1 : 0;
+      p.pol = p.skip ? "" : polarity(p, nm);
+      p.fn = fnOf(p);
+      p.nets = [...new Set(p.pads.map(q => q[1]).filter(Boolean))].sort();
+      if (p.skip) continue;
+      if (p.dnp) { dnp.push(p.r); continue; }
+      const st = step(p), key = st + "|" + nm + "|" + p.fp;
+      let g = groups.get(key);
+      if (!g) groups.set(key, g = { step: st, nm, fp: p.fp, lcsc, mpn, refs: [], pol: p.pol, note });
+      g.refs.push(p.r);
+      if (note && !g.note) g.note = note;
+    }
+    const gl = [...groups.values()];
+    gl.forEach(g => g.refs.sort(natcmp));
+    gl.sort((a, b) => a.step - b.step || natkey(a.refs[0])[0].localeCompare(natkey(b.refs[0])[0]) || b.refs.length - a.refs.length || natcmp(a.refs[0], b.refs[0]));
+    gl.forEach((g, i) => g.id = "g" + i);
+    board.groups = gl; board.dnp = dnp.sort(natcmp);
+    return board;
+  }
+  return { enrich, STEPS, natcmp };
+})();
+/*ENRICH-END*/
+
+// ======================= app =======================
+const NS = "http://www.w3.org/2000/svg";
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem("ksn:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ksn:" + k, JSON.stringify(v)); } catch (e) {} },
+};
+let toastT;
+function toast(msg, ms = 3200) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+
+// ---------- IndexedDB (per-browser board cache) ----------
+const DB = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    return this.db = await new Promise((res, rej) => {
+      try { const r = indexedDB.open("kicad-solder-nav", 1); r.onupgradeneeded = () => r.result.createObjectStore("boards", { keyPath: "key" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+      catch (e) { rej(e); }
+    });
+  },
+  async tx(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("boards", mode), s = t.objectStore("boards"); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); },
+  all() { return this.tx("readonly", s => s.getAll()).catch(() => []); },
+  put(b) { return this.tx("readwrite", s => s.put(b)).catch(() => {}); },
+  del(k) { return this.tx("readwrite", s => s.delete(k)).catch(() => {}); },
+};
+
+const S = { boards: [], b: null, side: "F", rot: 0, mode: "solder", lbl: LS.get("lbl", "ref"), trk: LS.get("trk", true), sel: null, cur: null, pad: null, vb: null, q: "", netIdx: {}, worldEl: null, pm: {} };
+let doneAll = LS.get("done", {});
+const doneOf = () => (doneAll[S.b.key] ||= {});
+const saveDone = () => LS.set("done", doneAll);
+
+// ---------- loading files ----------
+const SKIP_PATH = /(^|\/)(__MACOSX|\.history|\.git|node_modules)(\/|$)|(^|\/)\._/;
+async function readEntries(dirEntry, prefix) {
+  const out = [], reader = dirEntry.createReader();
+  for (;;) {
+    const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+    if (!batch.length) break;
+    for (const e of batch) out.push(...await walkEntry(e, prefix));
+  }
+  return out;
+}
+async function walkEntry(e, prefix = "") {
+  const path = prefix + e.name;
+  if (SKIP_PATH.test(path)) return [];
+  if (e.isFile) { const f = await new Promise((res, rej) => e.file(res, rej)); return [{ path, file: f }]; }
+  if (e.isDirectory) return readEntries(e, path + "/");
+  return [];
+}
+async function expandZips(list) {
+  const out = [];
+  for (const it of list) {
+    if (/\.zip$/i.test(it.path)) {
+      if (!window.JSZip) { toast("zip 需要联网加载解压库，当前不可用。请先解压后拖文件夹。"); continue; }
+      try {
+        const zip = await JSZip.loadAsync(it.file);
+        const base = it.path.replace(/\.zip$/i, "") + "/";
+        for (const name of Object.keys(zip.files)) {
+          const z = zip.files[name]; if (z.dir || SKIP_PATH.test(name)) continue;
+          if (/\.(kicad_pcb|csv)$/i.test(name)) out.push({ path: base + name, text: () => z.async("string") });
+          else if (/\.zip$/i.test(name) && !/gerber/i.test(name)) out.push(...await expandZips([{ path: base + name, file: await z.async("blob") }]));
+        }
+      } catch (e) { toast(`${it.path} 解压失败：${e.message}`); }
+    } else out.push({ path: it.path, text: () => it.file.text() });
+  }
+  return out;
+}
+const dirOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+const baseOf = p => p.split("/").pop();
+async function ingest(list) {
+  const items = await expandZips(list.filter(x => !SKIP_PATH.test(x.path)));
+  const pcbs = items.filter(x => /\.kicad_pcb$/i.test(x.path)), csvs = items.filter(x => /\.csv$/i.test(x.path));
+  if (!pcbs.length) { toast("没有找到 .kicad_pcb 文件。请拖入 KiCad 工程文件夹、PCB 文件或包含它们的 zip。"); return; }
+  $("#loadMsg").textContent = `正在解析 ${pcbs.length} 块板…`;
+  const csvCache = {};
+  const bomFor = async pcb => {
+    const dir = dirOf(pcb.path), stem = baseOf(pcb.path).replace(/\.kicad_pcb$/i, "").toLowerCase();
+    let near = csvs.filter(c => dirOf(c.path) === dir);
+    const named = near.filter(c => baseOf(c.path).toLowerCase().includes(stem));
+    if (named.length) near = named;
+    near = near.sort((a, b) => (/bom/i.test(baseOf(b.path)) - /bom/i.test(baseOf(a.path))) || (baseOf(b.path).toLowerCase().includes(stem) - baseOf(a.path).toLowerCase().includes(stem)));
+    // loose single-csv uploads (no folder) also count
+    const pool = near.length ? near : csvs.filter(c => !c.path.includes("/"));
+    for (const c of pool) {
+      if (!(c.path in csvCache)) { try { csvCache[c.path] = KiPCB.bom(await c.text()); } catch (e) { csvCache[c.path] = null; } }
+      if (csvCache[c.path]) return { map: csvCache[c.path], name: baseOf(c.path) };
+    }
+    return null;
+  };
+  let added = 0; const errs = [];
+  for (const pcb of pcbs) {
+    try {
+      const text = await pcb.text();
+      const b = KiPCB.parse(text, baseOf(pcb.path));
+      const bm = await bomFor(pcb);
+      Enrich.enrich(b, bm && bm.map);
+      b.bomFile = bm ? bm.name : "";
+      const folder = dirOf(pcb.path).split("/").pop();
+      b.name = baseOf(pcb.path).replace(/\.kicad_pcb$/i, "");
+      b.sub = b.title || folder || "";
+      b.key = (dirOf(pcb.path) + "/" + b.name) + "#" + text.length;
+      b.added = Date.now();
+      const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.sub === b.sub));
+      if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
+      DB.put(b); added++;
+    } catch (e) { errs.push(`${pcb.path}：${e.message}`); }
+  }
+  $("#loadMsg").textContent = "";
+  if (errs.length) toast("有文件没读成：\n" + errs.join("\n"), 6000);
+  if (added) { toast(`读入 ${added} 块板`); showApp(); openBoard(S.boards[S.boards.length - added].key); }
+}
+function filesToList(files) { return [...files].map(f => ({ path: f.webkitRelativePath || f.name, file: f })); }
+$("#inDir").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
+$("#inFiles").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
+$("#pickDir").onclick = () => $("#inDir").click();
+$("#pickFiles").onclick = () => $("#inFiles").click();
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+window.addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("#dropmask").hidden = false; });
+window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener("dragleave", e => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $("#dropmask").hidden = true; } });
+window.addEventListener("drop", async e => {
+  if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; $("#dropmask").hidden = true;
+  const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  let list = [];
+  if (items.length) for (const en of items) list.push(...await walkEntry(en));
+  else list = filesToList(e.dataTransfer.files);
+  ingest(list);
+});
+
+// ---------- demo board ----------
+const DEMO = `(kicad_pcb (version 20240108) (generator "demo")
+ (title_block (title "示例：LDO 小板"))
+ (gr_rect (start 100 100) (end 130 120) (stroke (width 0.1)) (layer "Edge.Cuts"))
+ (gr_circle (center 103 103) (end 104.6 103) (stroke (width 0.1)) (layer "Edge.Cuts"))
+ (footprint "Package_TO_SOT_SMD:SOT-23-5" (layer "F.Cu") (at 114 110 90)
+  (property "Reference" "U1") (property "Value" "AP2112K-3.3") (property "LCSC" "C51118") (attr smd)
+  (fp_poly (pts (xy -0.9 -1.15) (xy 0.9 -1.15) (xy 0.9 1.45) (xy -0.6 1.45) (xy -0.9 1.15)) (stroke (width 0.1)) (layer "F.Fab"))
+  (fp_rect (start -2.05 -1.7) (end 2.05 1.7) (stroke (width 0.05)) (layer "F.CrtYd"))
+  (pad "1" smd roundrect (at -0.95 1.1375 90) (size 1.325 0.6) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "VIN"))
+  (pad "2" smd roundrect (at 0 1.1375 90) (size 1.325 0.6) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND"))
+  (pad "3" smd roundrect (at 0.95 1.1375 90) (size 1.325 0.6) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "VIN"))
+  (pad "4" smd roundrect (at 0.95 -1.1375 90) (size 1.325 0.6) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net ""))
+  (pad "5" smd roundrect (at -0.95 -1.1375 90) (size 1.325 0.6) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "+3V3")))
+ (footprint "Capacitor_SMD:C_0805_2012Metric" (layer "F.Cu") (at 109 110 90)
+  (property "Reference" "C1") (property "Value" "10uF") (property "LCSC" "C15850") (attr smd)
+  (fp_rect (start -1 -0.625) (end 1 0.625) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.95 0 90) (size 1 1.45) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "VIN"))
+  (pad "2" smd roundrect (at 0.95 0 90) (size 1 1.45) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND")))
+ (footprint "Capacitor_SMD:C_0805_2012Metric" (layer "F.Cu") (at 119 110 90)
+  (property "Reference" "C2") (property "Value" "10uF") (property "LCSC" "C15850") (attr smd)
+  (fp_rect (start -1 -0.625) (end 1 0.625) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.95 0 90) (size 1 1.45) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "+3V3"))
+  (pad "2" smd roundrect (at 0.95 0 90) (size 1 1.45) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND")))
+ (footprint "Capacitor_SMD:C_0402_1005Metric" (layer "F.Cu") (at 116.5 106)
+  (property "Reference" "C3") (property "Value" "100nF") (property "LCSC" "C1525") (attr smd)
+  (fp_rect (start -0.5 -0.25) (end 0.5 0.25) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.48 0) (size 0.56 0.62) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "+3V3"))
+  (pad "2" smd roundrect (at 0.48 0) (size 0.56 0.62) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND")))
+ (footprint "Resistor_SMD:R_0603_1608Metric" (layer "F.Cu") (at 123 106)
+  (property "Reference" "R1") (property "Value" "1k") (property "LCSC" "C21190") (attr smd)
+  (fp_rect (start -0.8 -0.4) (end 0.8 0.4) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "+3V3"))
+  (pad "2" smd roundrect (at 0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "LED_A")))
+ (footprint "LED_SMD:LED_0603_1608Metric" (layer "F.Cu") (at 123 110 270)
+  (property "Reference" "D1") (property "Value" "绿灯") (property "LCSC" "C72043") (attr smd)
+  (fp_poly (pts (xy -0.8 -0.4) (xy 0.8 -0.4) (xy 0.8 0.4) (xy -0.8 0.4)) (stroke (width 0.1)) (layer "F.Fab"))
+  (fp_line (start -0.5 -0.4) (end -0.5 0.4) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.7875 0 270) (size 0.875 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND"))
+  (pad "2" smd roundrect (at 0.7875 0 270) (size 0.875 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "LED_A")))
+ (footprint "Resistor_SMD:R_0603_1608Metric" (layer "F.Cu") (at 116.5 114)
+  (property "Reference" "R2") (property "Value" "10k") (property "LCSC" "C25804") (attr smd dnp)
+  (fp_rect (start -0.8 -0.4) (end 0.8 0.4) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "VIN"))
+  (pad "2" smd roundrect (at 0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.25) (net "GND")))
+ (footprint "Capacitor_SMD:C_0402_1005Metric" (layer "B.Cu") (at 114 106)
+  (property "Reference" "C4") (property "Value" "100nF") (property "LCSC" "C1525") (attr smd)
+  (fp_rect (start -0.5 -0.25) (end 0.5 0.25) (stroke (width 0.1)) (layer "B.Fab"))
+  (pad "1" smd roundrect (at 0.48 0) (size 0.56 0.62) (layers "B.Cu" "B.Paste" "B.Mask") (roundrect_rratio 0.25) (net "VIN"))
+  (pad "2" smd roundrect (at -0.48 0) (size 0.56 0.62) (layers "B.Cu" "B.Paste" "B.Mask") (roundrect_rratio 0.25) (net "GND")))
+ (footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" (layer "F.Cu") (at 104 107.46)
+  (property "Reference" "J1") (property "Value" "电源输入") (attr through_hole)
+  (fp_rect (start -1.27 -1.27) (end 1.27 6.35) (stroke (width 0.1)) (layer "F.Fab"))
+  (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask") (net "VIN"))
+  (pad "2" thru_hole oval (at 0 2.54) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask") (net "GND"))
+  (pad "3" thru_hole oval (at 0 5.08) (size 1.7 1.7) (drill 1) (layers "*.Cu" "*.Mask") (net "+3V3")))
+ (footprint "TestPoint:TestPoint_Pad_1.0x1.0mm" (layer "F.Cu") (at 127 116)
+  (property "Reference" "TP1") (property "Value" "3V3") (attr exclude_from_pos_files exclude_from_bom)
+  (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Mask") (net "+3V3")))
+ (segment (start 104 107.46) (end 108.05 107.46) (width 0.5) (layer "F.Cu") (net "VIN"))
+ (segment (start 108.05 107.46) (end 109 108.41) (width 0.5) (layer "F.Cu") (net "VIN"))
+ (segment (start 109 108.41) (end 109 109.05) (width 0.5) (layer "F.Cu") (net "VIN"))
+ (segment (start 119 109.05) (end 119 106) (width 0.4) (layer "F.Cu") (net "+3V3"))
+ (segment (start 117 106) (end 122.175 106) (width 0.3) (layer "F.Cu") (net "+3V3"))
+ (segment (start 123.825 106) (end 123 109.2125) (width 0.25) (layer "F.Cu") (net "LED_A"))
+ (via (at 111 112) (size 0.6) (drill 0.3) (net "GND"))
+)`;
+$("#loadDemo").onclick = () => {
+  const b = KiPCB.parse(DEMO, "demo.kicad_pcb"); Enrich.enrich(b, null);
+  Object.assign(b, { name: "demo", sub: "示例板", key: "demo#builtin", bomFile: "", added: Date.now() });
+  const i = S.boards.findIndex(x => x.key === b.key); if (i >= 0) S.boards[i] = b; else S.boards.push(b);
+  DB.put(b); showApp(); openBoard(b.key);
+};
+
+// ---------- view transform (mirror for bottom, rotate in 90° steps) ----------
+function view() {
+  const [x0, y0, x1, y1] = S.b.bbox, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, B = S.side === "B", r = S.rot;
+  const a = r * Math.PI / 180, c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
+  const vec = (dx, dy) => { if (B) dx = -dx; return [dx * c - dy * s, dx * s + dy * c]; };
+  const pt = (x, y) => { const v = vec(x - cx, y - cy); return [cx + v[0], cy + v[1]]; };
+  const tf = `rotate(${r} ${cx} ${cy})` + (B ? ` translate(${2 * cx} 0) scale(-1 1)` : "");
+  const up = (x, y) => `translate(${x} ${y})` + (B ? " scale(-1 1)" : "") + (r ? ` rotate(${-r})` : "");
+  return { tf, pt, vec, up };
+}
+const onSide = (p, side) => p.tht || p.s === side;
+
+function dirWord(dx, dy) {
+  if (Math.hypot(dx, dy) < 0.05) return "中间";
+  const a = Math.atan2(dy, dx) * 180 / Math.PI;
+  return ["右", "右下", "下", "左下", "左", "左上", "上", "右上"][((Math.round(a / 45) % 8) + 8) % 8];
+}
+function orientText(p) {
+  if (p.pol === "none-bi") return "双向 TVS，无极性，两个方向都行";
+  if (!p.pol || !p.p1) return "无极性";
+  const v = view().vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
+  const where = `（当前${S.side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
+  if (p.pol === "k1") return `阴极 K 在${w}侧：器件色带/横线朝${w}${where}`;
+  if (p.pol === "plus1") return `正极 + 在${w}侧${where}`;
+  return `1 脚在${w}${w.length === 1 ? "侧" : "角"}：对准芯片圆点/缺角${where}`;
+}
+
+function shortVal(p) { const s = (p.val && p.val !== "~" ? p.val : p.nm || "").split(/\s+/)[0]; return s.length > 10 ? s.slice(0, 9) + "…" : s; }
+
+function render() {
+  const b = S.b, svg = $("#board"), V = view();
+  svg.innerHTML = "";
+  svg.classList.toggle("pinmode", S.mode === "pin");
+  const [x0, y0, x1, y1] = b.bbox;
+  const world = el("g", { transform: V.tf }, svg); S.worldEl = world;
+  el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: .8, class: "b-fill" }, world);
+  if (S.trk) {
+    for (const [w, d] of b.tracks[S.side]) el("path", { d, class: "trk", "stroke-width": w }, world);
+    for (const [vx, vy, vr] of b.vias) el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, world);
+  }
+  if (b.silk[S.side]) el("path", { d: b.silk[S.side], class: "bsilk" }, world);
+  if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
+  const done = doneOf(), pin = S.mode === "pin";
+  const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));
+  const selPad = pin && S.pad ? S.pm[S.pad.r]?.pads[S.pad.i] : null;
+  const selNet = selPad && selPad[1] ? selPad[1] : null;
+  const netRefs = new Set(selNet ? (S.netIdx[selNet] || []).map(x => x.r) : []);
+  if (pin && S.cur) netRefs.add(S.cur);
+  const root = svg; if (selRefs.size || netRefs.size) world.classList.add("dim");
+  const parts = el("g", {}, world), labels = el("g", {}, world), pnums = el("g", {}, world), rings = el("g", {}, world);
+  for (const p of b.parts) {
+    if (!onSide(p, S.side)) continue;
+    const g = el("g", { class: "part" + (p.tp ? " tp" : "") + (p.dnp ? " dnp" : "") + (done[p.r] && !pin ? " done" : "") + (selRefs.has(p.r) ? " hi" : "") + (netRefs.has(p.r) ? " nhi" : "") + (S.cur === p.r ? " cur" : ""), "data-r": p.r }, parts);
+    if (p.body) el("path", { d: p.body, class: "body" }, g);
+    if (p.silk && !p.tp) el("path", { d: p.silk, class: "sk" }, g);
+    const polar = p.pol && p.pol !== "none-bi";
+    if (pin) {
+      p.pads.forEach(([n, net, d, th, px, py, sz], i) => {
+        if (!d) return;
+        const isSel = S.pad && S.pad.r === p.r && S.pad.i === i, onNet = selNet && net === selNet;
+        el("path", { d, class: "pad" + (th === 2 ? " npth" : "") + (n === "1" && polar ? " p1" : "") + (onNet ? " net" : "") + (isSel ? " psel" : "") }, g);
+        if (n && th !== 2 && sz > 0) { const fs = Math.max(.12, Math.min(.9, sz * .55 / Math.max(1, n.length * .6))); const t = el("text", { transform: V.up(px, py), class: "pn", "font-size": fs }, pnums); t.textContent = n; }
+        if (onNet || isSel) el("circle", { cx: px, cy: py, r: sz / 2 + .45, class: "ring" + (isSel ? " cur" : " net") }, rings);
+      });
+    } else {
+      let pd = "", p1d = "", nd = "";
+      for (const [n, net, d, th] of p.pads) { if (!d) continue; if (th === 2) nd += d; else if (n === "1" && polar) p1d += d; else pd += d; }
+      if (pd) el("path", { d: pd, class: "pad" }, g);
+      if (p1d) el("path", { d: p1d, class: "pad p1" }, g);
+      if (nd) el("path", { d: nd, class: "pad npth" }, g);
+    }
+    el("rect", { x: p.bb[0], y: p.bb[1], width: p.bb[2] - p.bb[0], height: p.bb[3] - p.bb[1], fill: "transparent" }, g);
+    if ((p.skip && !(pin && p.tp)) || S.lbl === "none") continue;
+    const w = p.bb[2] - p.bb[0], h = p.bb[3] - p.bb[1], hi = selRefs.has(p.r);
+    const fs = Math.max(.32, Math.min(1.3, Math.min(w, h) * .42)) * (hi ? 1.25 : 1);
+    const cx = (p.bb[0] + p.bb[2]) / 2, cy = (p.bb[1] + p.bb[3]) / 2;
+    const t = el("text", { transform: V.up(cx, cy), class: "lbl" + (hi ? " hi" : "") + (p.dnp ? " dnp" : ""), "font-size": fs, "stroke-width": fs * .22 }, labels);
+    t.textContent = S.lbl === "val" && !pin ? shortVal(p) : p.r + (p.dnp ? " DNP" : "");
+    if (hi) el("circle", { cx, cy, r: Math.max(w, h) / 2 + .9, class: "ring" + (S.cur === p.r ? " cur" : "") }, rings);
+  }
+  setVB(S.vb);
+}
+
+// ---------- pan / zoom ----------
+function fitVB() {
+  const V = view(), [x0, y0, x1, y1] = S.b.bbox, c = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(q => V.pt(q[0], q[1]));
+  const xs = c.map(q => q[0]), ys = c.map(q => q[1]), m = 3;
+  return { x: Math.min(...xs) - m, y: Math.min(...ys) - m, w: Math.max(...xs) - Math.min(...xs) + 2 * m, h: Math.max(...ys) - Math.min(...ys) + 2 * m };
+}
+function setVB(v) { S.vb = v || fitVB(); $("#board").setAttribute("viewBox", `${S.vb.x} ${S.vb.y} ${S.vb.w} ${S.vb.h}`); }
+function zoomAt(f, px, py) {
+  const v = S.vb, r = $("#board").getBoundingClientRect();
+  const s = Math.min(r.width / v.w, r.height / v.h), ox = (r.width - v.w * s) / 2, oy = (r.height - v.h * s) / 2;
+  const wx = v.x + ((px ?? r.width / 2) - ox) / s, wy = v.y + ((py ?? r.height / 2) - oy) / s;
+  const fw = fitVB().w, nw = Math.max(1.5, Math.min(fw * 2, v.w / f)), k = nw / v.w;
+  setVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w: nw, h: v.h * k });
+}
+function zoomTo(refs) {
+  const V = view(); let a = [1e9, 1e9, -1e9, -1e9];
+  for (const r of refs) { const p = S.pm[r]; if (!p) continue;
+    for (const q of [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]) { const t = V.pt(q[0], q[1]); a = [Math.min(a[0], t[0]), Math.min(a[1], t[1]), Math.max(a[2], t[0]), Math.max(a[3], t[1])]; } }
+  if (a[0] > a[2]) return;
+  const m = 4, w = Math.max(a[2] - a[0] + 2 * m, 12), h = Math.max(a[3] - a[1] + 2 * m, 12);
+  setVB({ x: (a[0] + a[2]) / 2 - w / 2, y: (a[1] + a[3]) / 2 - h / 2, w, h });
+}
+const wrap = $("#wrap");
+wrap.addEventListener("wheel", e => { if (e.target.closest(".card")) return; e.preventDefault(); const r = wrap.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+const ptrs = new Map(); let moved = false;
+wrap.addEventListener("pointerdown", e => { if (e.target.closest(".card")) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; wrap.setPointerCapture(e.pointerId); wrap.classList.add("drag"); });
+wrap.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return;
+  const prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+  if (ptrs.size === 1) {
+    const dx = cur.x - prev.x, dy = cur.y - prev.y; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+    const r = $("#board").getBoundingClientRect(), s = Math.min(r.width / S.vb.w, r.height / S.vb.h);
+    setVB({ ...S.vb, x: S.vb.x - dx / s, y: S.vb.y - dy / s });
+  } else if (ptrs.size === 2) {
+    moved = true;
+    const other = [...ptrs.entries()].find(([k]) => k !== e.pointerId)[1];
+    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y), r = wrap.getBoundingClientRect();
+    if (d0 > 0) zoomAt(d1 / d0, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top);
+  }
+  ptrs.set(e.pointerId, cur);
+});
+const endPtr = e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId); if (!ptrs.size) wrap.classList.remove("drag");
+  if (!moved && e.type === "pointerup") {
+    if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY); if (hp) { pickPad(hp.r, hp.i, false); return; } }
+    const hit = document.elementsFromPoint(e.clientX, e.clientY).map(n => n.closest && n.closest(".part")).find(Boolean);
+    if (hit) pickPart(hit.dataset.r, false);
+  }
+};
+wrap.addEventListener("pointerup", endPtr); wrap.addEventListener("pointercancel", endPtr);
+function padAt(cx, cy) {
+  const pt = $("#board").createSVGPoint(); pt.x = cx; pt.y = cy;
+  const w = pt.matrixTransform(S.worldEl.getScreenCTM().inverse()), tol = S.vb.w / 80;
+  let best = null, bd = 1e9;
+  for (const p of S.b.parts) {
+    if (!onSide(p, S.side)) continue;
+    p.pads.forEach(([n, net, d, th, px, py, sz], i) => { if (!d || th === 2) return; const dist = Math.hypot(w.x - px, w.y - py) - sz / 2; if (dist < bd) { bd = dist; best = { r: p.r, i }; } });
+  }
+  return bd < Math.max(.25, tol) ? best : null;
+}
+
+// ---------- toolbar ----------
+$("#zin").onclick = () => zoomAt(1.4); $("#zout").onclick = () => zoomAt(1 / 1.4); $("#zfit").onclick = () => setVB(null);
+$("#zsel").onclick = () => { const g = S.b.groups.find(g => g.id === S.sel); if (S.cur) zoomTo([S.cur]); else if (g) zoomTo(g.refs); };
+document.querySelectorAll("#sideSeg button").forEach(btn => btn.onclick = () => setSide(btn.dataset.side, true));
+document.querySelectorAll("#modeSeg button").forEach(btn => btn.onclick = () => setMode(btn.dataset.mode));
+$("#rotBtn").onclick = () => { S.rot = (S.rot + 90) % 360; $("#rotBtn").textContent = `⟳ ${S.rot}°`; S.vb = null; render(); renderCard(); };
+$("#lblSel").value = S.lbl; $("#lblSel").onchange = e => { S.lbl = e.target.value; LS.set("lbl", S.lbl); render(); };
+$("#trkBtn").setAttribute("aria-pressed", S.trk); $("#trkBtn").onclick = () => { S.trk = !S.trk; LS.set("trk", S.trk); $("#trkBtn").setAttribute("aria-pressed", S.trk); render(); };
+function setSide(side, user) {
+  if (S.side === side) return;
+  S.side = side; S.vb = null;
+  document.querySelectorAll("#sideSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.side === side));
+  if (user) { render(); renderCard(); }
+}
+function setMode(m) {
+  S.mode = m; S.pad = null; S.cur = null; if (m === "pin") S.sel = null;
+  document.querySelectorAll("#modeSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.mode === m));
+  $("#tpSec").hidden = m !== "pin";
+  $("#hint").textContent = m === "pin" ? "点焊盘看引脚 · 放大后更好点" : "滚轮/双指缩放 · 拖动平移";
+  render(); renderList(); renderCard();
+}
+
+// ---------- selection ----------
+const groupOfRef = r => S.b.groups.find(g => g.refs.includes(r));
+function selectGroup(id, zoom) {
+  if (S.mode === "pin") { const g0 = S.b.groups.find(g => g.id === id); if (g0) pickPart(g0.refs[0], true); return; }
+  S.sel = S.sel === id && !zoom ? null : id; S.cur = null; S.pad = null;
+  const g = S.b.groups.find(g => g.id === S.sel);
+  if (g) { const p = S.pm[g.refs[0]]; if (p && !p.tht && p.s !== S.side) setSide(p.s); }
+  render(); renderList(); renderCard();
+  if (g && zoom) zoomTo(g.refs);
+  const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function pickPart(r, zoom) {
+  const p = S.pm[r]; if (!p) return;
+  const g = groupOfRef(r);
+  S.sel = g && S.mode !== "pin" ? g.id : null; S.cur = r; S.pad = null;
+  if (!p.tht && p.s !== S.side) setSide(p.s);
+  render(); renderList(); renderCard();
+  if (zoom) zoomTo([r]);
+  const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row && !zoom) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function pickPad(r, i, zoom) {
+  const p = S.pm[r]; if (!p) return;
+  S.pad = { r, i }; S.cur = r;
+  if (!p.tht && p.s !== S.side) setSide(p.s);
+  render(); renderCard();
+  if (zoom) zoomTo([r]);
+}
+const orderedGroups = () => S.b.groups.slice();
+function stepGroup(dir, unfinishedOnly) {
+  const gs = orderedGroups(); if (!gs.length) return;
+  if (S.mode === "pin") setMode("solder");
+  const done = doneOf(), at = gs.findIndex(g => g.id === S.sel);
+  for (let k = 1; k <= gs.length; k++) {
+    const g = gs[((at < 0 ? (dir > 0 ? -1 : 0) : at) + dir * k + gs.length * 2) % gs.length];
+    if (!unfinishedOnly || !g.refs.every(r => done[r])) { S.sel = null; selectGroup(g.id, true); return; }
+  }
+  toast("这块板全部焊完了 ✓");
+}
+$("#nextBtn").onclick = () => stepGroup(1, true);
+$("#prevBtn").onclick = () => stepGroup(-1, false);
+$("#doneNext").onclick = () => {
+  const g = S.b.groups.find(g => g.id === S.sel); if (!g) { stepGroup(1, true); return; }
+  const done = doneOf(); g.refs.forEach(r => done[r] = 1); saveDone(); stepGroup(1, true);
+};
+
+// ---------- detail card ----------
+function renderCard() {
+  const c = $("#card"), p = S.cur && S.pm[S.cur];
+  if (!p) { c.hidden = true; return; }
+  c.hidden = false;
+  const head = `<button type="button" class="x" aria-label="关闭">×</button>
+    <div class="row1"><span class="ref">${esc(p.r)}</span><span class="nm">${esc(p.nm)}</span>${p.s === "B" ? '<span class="chip">底面</span>' : ""}${p.tht ? '<span class="chip">插件</span>' : ""}${p.dnp ? '<span class="chip">DNP 不焊</span>' : ""}</div>
+    <div class="fn">${[p.fp, p.lcsc, p.mpn && p.mpn !== p.nm ? p.mpn : ""].filter(Boolean).map(x => `<span class="chip">${esc(x)}</span>`).join(" ")}</div>
+    ${p.fn ? `<div class="fn">功能：${esc(p.fn)}</div>` : ""}
+    ${p.note ? `<div class="note" style="grid-column:auto">⚠ ${esc(p.note)}</div>` : ""}`;
+  if (S.mode === "pin") { c.innerHTML = head + pinBody(p); bindCard(c); return; }
+  const g = groupOfRef(p.r), done = doneOf();
+  c.innerHTML = head + `<div class="orient">${orientText(p)}</div>
+    ${p.nets.length ? `<div class="nets">网络：${p.nets.slice(0, 12).map(esc).join(" · ")}${p.nets.length > 12 ? ` … 共 ${p.nets.length} 个` : ""}</div>` : ""}
+    ${p.skip ? "" : `<div class="acts"><button type="button" class="tbtn" id="cdone">${done[p.r] ? "取消已焊" : "标记已焊 ✓"}</button>${g ? `<span class="hint">同类 ${g.refs.length} 个：${g.refs.map(esc).join(" ")}</span>` : ""}</div>`}`;
+  bindCard(c);
+  const b = c.querySelector("#cdone"); if (b) b.onclick = () => { done[p.r] ? delete done[p.r] : (done[p.r] = 1); saveDone(); render(); renderList(); renderCard(); };
+}
+const autoNet = n => /^\d+$/.test(n) || /^Net-\(|^unconnected-/i.test(n) || /-power-|^[a-z_]+-\w/.test(n);
+function pinBody(p) {
+  const netLabel = n => !n ? "未连接 (NC)" : esc(n) + (autoNet(n) ? ' <span class="hint">（自动命名的网络）</span>' : "");
+  let body = "";
+  if (S.pad && S.pad.r === p.r) {
+    const [n, net] = p.pads[S.pad.i];
+    const pinName = n === "" ? "无编号焊盘" : /^\d+$/.test(n) ? `第 ${esc(n)} 脚` : `${esc(n)} 脚`;
+    const others = net ? (S.netIdx[net] || []).filter(x => !(x.r === p.r && x.i === S.pad.i)) : [];
+    const tps = [...new Set(others.filter(x => S.pm[x.r]?.tp).map(x => x.r))], lim = 60;
+    const chip = x => `<button type="button" data-r="${esc(x.r)}" data-i="${x.i}">${esc(x.r)}·<b>${esc(x.n || "–")}</b>${x.s === "B" ? "(底)" : ""}</button>`;
+    body = `<div class="row1"><span>${pinName}</span><span>→</span><span class="netname">${netLabel(net)}</span></div>
+      ${tps.length ? `<div class="orient">可在测试点 ${tps.map(esc).join("、")} 上测</div>` : ""}
+      ${!net ? '<div class="hint">这个焊盘不接任何网络，应与其他点都不导通。</div>'
+        : !others.length ? '<div class="orient">这个网络只有这一个焊盘：该脚在板上没有连到别处（未使用/悬空），应与其他点都不导通。</div>'
+        : `<div class="hint">同网络还有 ${others.length} 个焊盘，与这里应导通：</div><div class="nchips">${others.slice(0, lim).map(chip).join("")}${others.length > lim ? `<span class="hint">… 共 ${others.length} 个</span>` : ""}</div>`}
+      <div class="hint">本器件全部引脚：</div>`;
+  } else body = `<div class="hint">点板上的焊盘，或下面的引脚：</div>`;
+  const pins = p.pads.map((pd, i) => [pd, i]).filter(([pd]) => pd[2] && pd[3] !== 2);
+  return body + `<div class="pins">${pins.map(([pd, i]) => `<button type="button" data-r="${esc(p.r)}" data-i="${i}" class="${S.pad && S.pad.r === p.r && S.pad.i === i ? "on" : ""}"><b>${esc(pd[0] || "–")}</b> ${pd[1] ? esc(pd[1]) : '<span class="hint">NC</span>'}</button>`).join("")}</div>`;
+}
+function bindCard(c) {
+  c.querySelector(".x").onclick = () => { S.cur = null; S.pad = null; render(); renderList(); renderCard(); };
+  c.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => pickPad(b.dataset.r, +b.dataset.i, !!b.closest(".nchips")));
+}
+
+// ---------- side list ----------
+function renderList() {
+  const b = S.b, done = doneOf(), host = $("#steps"), q = S.q.trim().toUpperCase();
+  host.innerHTML = "";
+  let total = 0, nd = 0, tht = 0, bot = 0;
+  const bySt = {};
+  for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 9) tht += g.refs.length; if (g.step === 8) bot += g.refs.length; }
+  $("#nums").innerHTML = `<span><b>${b.groups.length}</b> 种</span><span><b>${total - tht}</b> 贴片</span><span><b>${tht}</b> 插件</span>${bot ? `<span>底面 <b>${bot}</b></span>` : ""}${b.dnp.length ? `<span>DNP <b>${b.dnp.length}</b></span>` : ""}<span>已焊 <b>${nd}</b> / ${total}</span>`;
+  $("#bar").style.width = (total ? nd / total * 100 : 0) + "%";
+  $("#src").textContent = `${b.file}${b.bomFile ? " + " + b.bomFile : "（没有找到 BOM CSV，名称取自 PCB 里的 Value）"}`;
+  const match = g => !q || g.refs.some(r => r.toUpperCase().includes(q)) || g.nm.toUpperCase().includes(q) || (g.lcsc || "").toUpperCase() === q;
+  const anyHit = !q || b.groups.some(match);
+  let idx = 0;
+  for (const st of Object.keys(bySt).map(Number).sort((a, b) => a - b)) {
+    const gs = anyHit ? bySt[st].filter(match) : bySt[st];
+    if (!gs.length) continue;
+    idx++;
+    const [title, desc] = Enrich.STEPS[st];
+    const sec = document.createElement("section"); sec.className = "step";
+    sec.innerHTML = `<h2><span class="no">${idx}</span>${title}</h2><p>${desc}</p>`;
+    for (const g of gs) {
+      const nDone = g.refs.filter(r => done[r]).length, all = nDone === g.refs.length;
+      const row = document.createElement("div");
+      row.className = "grp" + (S.sel === g.id ? " sel" : "") + (all ? " alldone" : ""); row.dataset.id = g.id;
+      const polTxt = g.pol === "k1" ? "有极性：阴极" : g.pol === "plus1" ? "有极性：正负" : g.pol === "pin1" ? "认 1 脚" : "";
+      row.innerHTML = `<input type="checkbox" id="ck-${g.id}" ${all ? "checked" : ""} aria-label="这种全部已焊">
+        <div class="gname">${esc(g.nm)}</div><div class="gcount">×${g.refs.length}</div>
+        <div class="gmeta"><span class="chip">${esc(g.fp)}</span>${g.lcsc ? `<span class="chip">${esc(g.lcsc)}</span>` : ""}${polTxt ? `<span class="chip pol">${polTxt}</span>` : ""}${nDone && !all ? `<span>已焊 ${nDone}/${g.refs.length}</span>` : ""}</div>
+        ${g.note ? `<div class="note">⚠ ${esc(g.note)}</div>` : ""}
+        <div class="refs">${g.refs.map(r => `<button type="button" class="${done[r] ? "d" : ""}${S.cur === r ? " c" : ""}" data-r="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
+      row.onclick = e => {
+        if (e.target.matches("input")) { g.refs.forEach(r => e.target.checked ? (done[r] = 1) : delete done[r]); saveDone(); render(); renderList(); renderCard(); return; }
+        const rb = e.target.closest(".refs button"); if (rb) { pickPart(rb.dataset.r, true); return; }
+        selectGroup(g.id, true);
+      };
+      sec.appendChild(row);
+    }
+    host.appendChild(sec);
+  }
+  if (b.dnp.length) {
+    const sec = document.createElement("section"); sec.className = "step";
+    sec.innerHTML = `<h2>不焊（DNP）</h2><p>PCB 里标了 DNP 的器件，板图上用虚线框表示。</p><div class="refs" style="grid-column:auto">${b.dnp.map(r => `<button type="button" data-r="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
+    sec.querySelectorAll("button").forEach(x => x.onclick = () => pickPart(x.dataset.r, true));
+    host.appendChild(sec);
+  }
+}
+function renderTps() {
+  const tps = S.b.parts.filter(p => p.tp).sort((a, b) => Enrich.natcmp(a.r, b.r));
+  $("#tps").innerHTML = tps.length ? tps.map(p => `<button type="button" data-r="${esc(p.r)}">${esc(p.r)} <span>${esc(p.pads[0]?.[1] || "未连接")}</span></button>`).join("") : '<span class="hint">这块板没有测试点</span>';
+  $("#tps").querySelectorAll("button").forEach(b => b.onclick = () => pickPad(b.dataset.r, 0, true));
+}
+
+$("#q").addEventListener("input", e => {
+  S.q = e.target.value; renderList();
+  const q = S.q.trim().toUpperCase(); if (!q) return;
+  const m = q.match(/^([A-Z_#]+\d+)[.\-·:](\w+)$/);
+  if (m) { const p = S.pm[Object.keys(S.pm).find(r => r.toUpperCase() === m[1])]; const i = p ? p.pads.findIndex(pd => pd[0].toUpperCase() === m[2]) : -1;
+    if (i >= 0) { if (S.mode !== "pin") setMode("pin"); pickPad(p.r, i, true); } return; }
+  const p = S.b.parts.find(p => p.r.toUpperCase() === q);
+  if (p) { pickPart(p.r, true); return; }
+  const net = Object.keys(S.netIdx).find(n => n.toUpperCase() === q);
+  if (net) { if (S.mode !== "pin") setMode("pin"); const x = S.netIdx[net][0]; pickPad(x.r, x.i, false); }
+});
+$("#clr").onclick = () => { S.sel = null; S.cur = null; S.pad = null; $("#q").value = ""; S.q = ""; render(); renderList(); renderCard(); setVB(null); };
+
+$("#copyBom").onclick = async () => {
+  const b = S.b, rows = [["步骤", "名称", "封装", "LCSC", "MPN", "数量", "位号", "极性", "备注"]];
+  for (const g of b.groups) rows.push([Enrich.STEPS[g.step][0], g.nm, g.fp, g.lcsc, g.mpn, g.refs.length, g.refs.join(","), { k1: "阴极", plus1: "正负", pin1: "1脚" }[g.pol] || "", g.note]);
+  if (b.dnp.length) rows.push(["DNP", "不焊", "", "", "", b.dnp.length, b.dnp.join(","), "", ""]);
+  const tsv = rows.map(r => r.map(x => String(x ?? "").replace(/[\t\n]/g, " ")).join("\t")).join("\n");
+  try { await navigator.clipboard.writeText(tsv); toast("已复制，可直接粘贴到 Excel"); }
+  catch (e) { const ta = document.createElement("textarea"); ta.value = tsv; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast("已复制，可直接粘贴到 Excel"); } catch (e2) { toast("浏览器不允许复制"); } ta.remove(); }
+};
+let armed = null;
+function twoStep(btn, label, fn) {
+  if (armed === btn) { armed = null; btn.textContent = label; fn(); return; }
+  armed = btn; const old = btn.textContent; btn.textContent = "再点一次确认"; setTimeout(() => { if (armed === btn) { armed = null; btn.textContent = old; } }, 3000);
+}
+$("#resetProg").onclick = e => twoStep(e.currentTarget, "清空进度", () => { doneAll[S.b.key] = {}; saveDone(); render(); renderList(); renderCard(); });
+$("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => {
+  const k = S.b.key; DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
+  if (S.boards.length) openBoard(S.boards[0].key); else showEmpty();
+});
+
+// ---------- keyboard ----------
+document.addEventListener("keydown", e => {
+  if (!S.b || e.target.matches("input, select, textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k === "n" || k === "N" || k === "]") stepGroup(1, true);
+  else if (k === "[") stepGroup(-1, false);
+  else if (k === " ") { e.preventDefault(); $("#doneNext").click(); }
+  else if (k === "t" || k === "T") setMode(S.mode === "pin" ? "solder" : "pin");
+  else if (k === "f" || k === "F") setSide(S.side === "F" ? "B" : "F", true);
+  else if (k === "r" || k === "R") $("#rotBtn").click();
+  else if (k === "0") setVB(null);
+  else if (k === "+" || k === "=") zoomAt(1.4);
+  else if (k === "-") zoomAt(1 / 1.4);
+  else if (k === "Escape") $("#clr").click();
+  else return;
+});
+
+// ---------- boards ----------
+function renderTabs() {
+  const tabs = $("#tabs"); tabs.innerHTML = "";
+  for (const b of S.boards) {
+    const n = b.groups.reduce((a, g) => a + g.refs.length, 0);
+    const t = document.createElement("button");
+    t.type = "button"; t.setAttribute("role", "tab"); t.setAttribute("aria-selected", S.b && S.b.key === b.key);
+    t.innerHTML = `<span class="k">${esc(b.name)}</span><span class="s">${esc(b.sub ? b.sub + " · " : "")}${n} 个</span>`;
+    t.onclick = () => openBoard(b.key);
+    tabs.appendChild(t);
+  }
+  const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.innerHTML = '<span class="k">＋ 添加</span><span class="s">文件夹 / zip</span>';
+  add.onclick = () => $("#inDir").click(); tabs.appendChild(add);
+}
+function openBoard(key) {
+  S.b = S.boards.find(b => b.key === key) || S.boards[0];
+  S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
+  S.pm = Object.fromEntries(S.b.parts.map(p => [p.r, p]));
+  S.netIdx = {};
+  for (const p of S.b.parts) p.pads.forEach((pd, i) => { if (pd[1]) (S.netIdx[pd[1]] ||= []).push({ r: p.r, i, n: pd[0], s: p.tht ? "T" : p.s }); });
+  for (const n in S.netIdx) S.netIdx[n].sort((a, b) => Enrich.natcmp(a.r, b.r) || a.i - b.i);
+  setSide("F");
+  document.querySelectorAll("#sideSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.side === "F"));
+  LS.set("last", S.b.key);
+  renderTabs(); renderTps(); render(); renderList(); renderCard();
+  if (S.mode === "solder" && S.b.groups.length) { const done = doneOf(); const g = S.b.groups.find(g => !g.refs.every(r => done[r])) || S.b.groups[0]; selectGroup(g.id, false); }
+}
+function showApp() { $("#empty").hidden = true; $("#app").hidden = false; $("#tabs").hidden = false; }
+function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#tabs").hidden = true; S.b = null; }
+window.addEventListener("resize", () => { if (S.b) setVB(S.vb); });
+
+(async () => {
+  const saved = await DB.all();
+  if (saved && saved.length) {
+    S.boards = saved.sort((a, b) => (a.added || 0) - (b.added || 0));
+    showApp(); openBoard(LS.get("last", S.boards[0].key));
+  } else {
+    // first visit: open the built-in example so the page shows what it does
+    $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的 KiCad 工程。", 5000);
+  }
+})();
+</script>
+
+</html>
