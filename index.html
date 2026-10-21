@@ -2788,6 +2788,8 @@ async function walkEntry(e, prefix = "") {
   return [];
 }
 const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
+// bump when import rules change: boards parsed by an older version are dropped on load and must be re-imported
+const IMPORT_VER = 3;
 const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
   if (!list.length) return;
@@ -2804,7 +2806,7 @@ async function ingest(list) {
     const b = m.board;
     Enrich.enrich(b, m.bom);
     if (!b.groups.length && !b.dnp.length) { res.notes.push(`${m.path.replace(/#.*$/, "")}：里面没有需要焊接的器件（可能只是封装库或板框），已跳过`); continue; }
-    Object.assign(b, { name: m.name, sub: m.source, source: m.source, bomFile: m.bomFile || "", file: m.path.replace(/#.*$/, "").split("/").pop(), added: Date.now(), warn: b.warn || [] });
+    Object.assign(b, { name: m.name, sub: m.source, source: m.source, bomFile: m.bomFile || "", file: m.path.replace(/#.*$/, "").split("/").pop(), added: Date.now(), warn: b.warn || [], ver: IMPORT_VER });
     b.key = boardKey(m, b);
     const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source));
     if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
@@ -2909,7 +2911,7 @@ const DEMO = `(kicad_pcb (version 20240108) (generator "demo")
 )`;
 $("#loadDemo").onclick = () => {
   const b = ImpKiCad.parse(DEMO, "demo.kicad_pcb"); Enrich.enrich(b, null);
-  Object.assign(b, { name: "demo", sub: "示例板", source: "KiCad PCB（内置示例）", file: "demo.kicad_pcb", key: "demo#builtin", bomFile: "", added: Date.now(), warn: [] });
+  Object.assign(b, { name: "demo", sub: "示例板", source: "KiCad PCB（内置示例）", file: "demo.kicad_pcb", key: "demo#builtin", bomFile: "", added: Date.now(), warn: [], ver: IMPORT_VER });
   const i = S.boards.findIndex(x => x.key === b.key); if (i >= 0) S.boards[i] = b; else S.boards.push(b);
   DB.put(b); showApp(); openBoard(b.key);
 };
@@ -3375,13 +3377,20 @@ function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#
 window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => setVB(S[P.key], P)); });
 
 (async () => {
-  const saved = await DB.all();
-  if (saved && saved.length) {
+  let saved = await DB.all() || [];
+  const stale = saved.filter(b => b.ver !== IMPORT_VER);
+  if (stale.length) {
+    for (const b of stale) DB.del(b.key);
+    saved = saved.filter(b => b.ver === IMPORT_VER);
+    const names = stale.filter(b => b.key !== "demo#builtin").map(b => b.name);
+    if (names.length) showNotes([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
+  }
+  if (saved.length) {
     S.boards = saved.sort((a, b) => (a.added || 0) - (b.added || 0));
     showApp(); openBoard(LS.get("last", S.boards[0].key));
   } else {
     // first visit: open the built-in example so the page shows what it does
-    $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的 KiCad 工程。", 5000);
+    $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的工程文件夹或生产文件。", 5000);
   }
 })();
 
