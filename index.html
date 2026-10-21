@@ -45,7 +45,11 @@ button, select { font: inherit; color: inherit; }
 .tabs button .s { font-size: 11px; color: var(--muted); }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
 .tabs button[aria-selected="true"] .s { color: inherit; opacity: .75; }
-.tabs .add { border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
+.tabs button { position: relative; padding-right: 26px; }
+.tabs .del { position: absolute; top: 3px; right: 4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; font-size: 13px; line-height: 18px; text-align: center; color: inherit; opacity: .45; cursor: pointer; }
+.tabs .del:hover { opacity: 1; background: var(--accent-soft); }
+.tabs .del.armed { opacity: 1; background: var(--accent); color: var(--panel); font-size: 11px; }
+.tabs .add { padding-right: 12px; border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
@@ -1290,7 +1294,7 @@ globalThis.ImpEasyEDA = (() => {
   // gather every document from all EasyEDA files of a project and build one board per PCB document
   // items: strings or {text, name}; one board per PCB document (multi-board projects keep each board's own title)
   function parseProject(items) {
-    const pool = { foot: {}, dev: {}, pcbs: [] };
+    const pool = { foot: {}, dev: {}, pcbs: [], boards: {} };
     for (const it of items) for (const d of docs(typeof it === "string" ? it : it.text)) {
       d.src = typeof it === "string" ? "" : it.name || "";
       const type = String(d.head.docType || "").toUpperCase(), uuid = d.head.uuid;
@@ -1301,12 +1305,15 @@ globalThis.ImpEasyEDA = (() => {
       } else if (type === "DEVICE") {
         const meta = d.recs.find(r => r.type === "META");
         if (uuid) pool.dev[uuid] = { attrs: (meta && meta.b && meta.b.attributes) || {}, title: meta && meta.b && meta.b.title };
-      } else if (type === "PCB") pool.pcbs.push(d);
+      } else if (type === "BOARD") { const meta = d.recs.find(r => r.type === "META"); if (uuid) pool.boards[uuid] = (meta && meta.b && meta.b.title) || ""; }
+      else if (type === "PCB") pool.pcbs.push(d);
     }
     return pool.pcbs.map(p => {
       const meta = p.recs.find(r => r.type === "META"), board = build(p, pool);
       const withPads = board.parts.filter(q => q.pads.length && q.fp !== "PAD").length, comps = board.parts.filter(q => q.fp !== "PAD").length;
-      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", uuid: p.head.uuid, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
+      // a PCB document hangs under a BOARD (PCB + schematic); its title tells archived/old boards apart from the current one
+      const boardTitle = (meta && meta.b && pool.boards[meta.b.board]) || "";
+      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", boardTitle, uuid: p.head.uuid, time: +p.head.updateTime || 0, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
     });
   }
   return { parseProject, docs, isDoc, pathRuns };
@@ -1756,7 +1763,7 @@ globalThis.ImpFab = (() => {
     const comps = new Map();
     let cplInfo = null;
     if (inp.cpl && inp.cpl.rows.length) {
-      const al = alignCPL(inp.cpl, pads.filter(p => p.side !== "T" || true), padRefs) || { sc: 1, sy: 1, ox: 0, oy: 0, res: 0 };
+      const al = (pads.length && alignCPL(inp.cpl, pads, padRefs)) || { sc: 1, sy: 1, ox: 0, oy: 0, res: 0 }; // no copper (placement-only): nothing to align to
       cplInfo = al;
       if (Math.abs(al.ox) > 0.05 || Math.abs(al.oy) > 0.05) warn.push(`坐标文件与 Gerber 原点不同，已自动对齐（偏移 ${al.ox.toFixed(2)}, ${al.oy.toFixed(2)} mm）`);
       if (al.sc !== 1) warn.push(`坐标文件单位按 ${al.sc === 0.0254 ? "mil" : al.sc === 25.4 ? "inch" : "mm"} 处理`);
@@ -2461,20 +2468,33 @@ globalThis.Project = (() => {
     // EasyEDA: group docs by archive / directory
     const ee = {};
     for (const c of C.filter(c => c.kind === "easyeda")) (ee[c.entry.inArchive || c.dir] ||= []).push(c);
-    const noFoot = [];
+    const noFoot = [], archived = [], eeAll = [];
+    const ARCHIVE = /archive|历史|归档|废弃|作废|obsolete|deprecated/i;
     for (const [grp, list] of Object.entries(ee)) {
       try {
         const res = ImpEasyEDA.parseProject(list.map(c => ({ text: c.text(), name: c.path })));
-        const proj = stemOf(grp || "easyeda").replace(/^ProPrj_/, "").replace(/_\d{4}-\d{2}-\d{2}$/, "");
-        const good = res.filter(r => r.comps && r.padCoverage >= 0.5);
-        for (const r of res) if (r.comps && r.padCoverage < 0.5) noFoot.push(r.src || grp); // PCB without its footprints (bare .epcb snapshot)
-        for (const r of good) {
-          const own = r.title && !/^PCB\d*$/i.test(r.title) ? r.title : stemOf(r.src || grp || "easyeda");
-          add(r.board, { path: (r.src || grp) + "#" + (r.uuid || ""), name: good.length > 1 ? `${proj} · ${own}` : own, source: "嘉立创EDA专业版" });
+        for (const r of res) {
+          if (!r.comps) continue;
+          if (r.padCoverage < 0.5) { noFoot.push(r.src || grp); continue; } // PCB without its footprints (bare .epcb snapshot)
+          if (ARCHIVE.test(r.boardTitle) || ARCHIVE.test(r.title)) { archived.push(r.boardTitle || r.title); continue; } // boards the designer marked as history
+          eeAll.push({ ...r, grp });
         }
         designDirs.push(dirOf(list[0].path));
       } catch (err) { errors.push(`${grp}：${err.message}`); }
     }
+    // the same PCB document saved in several exports/backups: keep only the most recently edited copy
+    const eeKey = r => r.uuid || r.title, newest = {}, older = {};
+    for (const r of eeAll) { const k = eeKey(r), o = newest[k]; if (!o || r.time > o.time) { if (o) (older[k] ||= []).push(o); newest[k] = r; } else (older[k] ||= []).push(r); }
+    const eeKeep = Object.values(newest);
+    const projOf = r => stemOf(r.grp || "easyeda").replace(/^ProPrj_/, "").replace(/_\d{4}-\d{2}-\d{2}$/, "").replace(/_\d{8}_\d{4}$/, "");
+    for (const r of eeKeep) {
+      const own = r.title && !/^PCB\d*$/i.test(r.title) ? r.title : stemOf(r.src || r.grp || "easyeda");
+      const several = eeKeep.filter(x => x.grp === r.grp).length > 1;
+      add(r.board, { path: (r.src || r.grp) + "#" + (r.uuid || ""), name: several ? `${projOf(r)} · ${own}` : own, source: "嘉立创EDA专业版", time: r.time });
+    }
+    const day = t => t ? new Date(t).toISOString().slice(0, 10) : "";
+    for (const [k, list] of Object.entries(older)) { const n = newest[k]; notes.push(`${n.title || k} 有 ${list.length + 1} 个版本，用的是最新编辑的那份（${baseOf(n.src || n.grp)}${n.time ? "，" + day(n.time) : ""}），较旧的 ${list.map(r => baseOf(r.src || r.grp) + (r.time ? "（" + day(r.time) + "）" : "")).slice(0, 3).join("、")} 已跳过`); }
+    if (archived.length) notes.push(`跳过 ${archived.length} 块标记为历史/归档的板：${[...new Set(archived)].join("、")}`);
     if (noFoot.length) notes.push(`${noFoot.length} 个嘉立创 PCB 文档缺少封装数据（例如 ${baseOf(noFoot[0])}），已跳过。请在嘉立创EDA里用“文件 → 导出 → 工程”导出完整的 .epro2 再拖进来。`);
     for (const c of C.filter(c => c.kind === "easystd")) {
       try { add(ImpEasyStd.parse(JSON.parse(c.text()), baseOf(c.path)), { path: c.path, name: stemOf(c.path).replace(/^PCB_(PCB_)?/, ""), source: "嘉立创EDA标准版" }); designDirs.push(c.dir); }
@@ -2541,6 +2561,10 @@ globalThis.Project = (() => {
       if (Math.max(...xs) - Math.min(...xs) > 600 || Math.max(...ys) - Math.min(...ys) > 600) continue; // not board coordinates
       const area = dirOf(t.c.dir);
       if (covered(t.c.dir) || gdirs.some(d => isAncestor(t.c.dir, d) || isAncestor(d, t.c.dir) || isAncestor(area, d))) continue;
+      // a placement list for a board that a design file already describes (same designators): the design file wins
+      const cplRefs = new Set(t.cpl.rows.map(r => r.ref));
+      const twin = boards.find(bd => !bd.path.endsWith("#fab") && bd.board.parts.filter(p => cplRefs.has(p.r)).length >= 0.6 * Math.min(cplRefs.size, bd.board.parts.length));
+      if (twin) { notes.push(`坐标文件 ${baseOf(t.c.path)} 和设计文件里的 ${twin.name} 是同一块板（位号基本相同），已直接用设计文件`); continue; }
       const nt = near(t.c.dir, nets.map(c => ({ c })));
       let net = null; for (const n of nt) { try { net = n.c.kind === "fly" ? (x => x && { pads: x.pads, comps: x.comps })(Tables.flyprobe(n.c.text())) : { pads: Tables.ipc356(n.c.text()) }; if (net && net.pads) break; } catch (e) {} }
       const b = ImpFab.build({ layers: {}, holes: [], cpl: t.cpl, net });
@@ -2790,7 +2814,7 @@ async function walkEntry(e, prefix = "") {
 }
 const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
 // bump when import rules change: boards parsed by an older version are dropped on load and must be re-imported
-const IMPORT_VER = 3;
+const IMPORT_VER = 4;
 const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
   if (!list.length) return;
@@ -2816,7 +2840,10 @@ async function ingest(list) {
   const newKeys = new Set(added);
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
-  showNotes(msgs);
+  S.flash = null;
+  // import notes belong to the boards this import produced, so switching tabs shows the right ones
+  for (const k of added) { const b = S.boards.find(x => x.key === k); if (b) { b.notes = msgs; DB.put(b); } }
+  if (!firstKey) showNotes(msgs);
   const from = [...roots].join("、");
   if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
@@ -3323,10 +3350,17 @@ $("#rmAll").onclick = e => twoStep(e.currentTarget, "清空全部板子", () => 
   for (const b of S.boards) DB.del(b.key);
   S.boards = []; doneAll = {}; saveDone(); showNotes([]); showEmpty();
 });
-$("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => {
-  const k = S.b.key; DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
-  if (S.boards.length) openBoard(S.boards[0].key); else showEmpty();
-});
+function removeBoard(k) {
+  DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
+  if (!S.boards.length) showEmpty(); else if (!S.b || S.b.key === k) openBoard(S.boards[0].key); else renderTabs();
+}
+$("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => removeBoard(S.b.key));
+// × on a tab: first click asks, second click deletes
+function delStep(el, key) {
+  if (el.classList.contains("armed")) { removeBoard(key); toast("已删除这块板"); return; }
+  el.classList.add("armed"); el.textContent = "删除？"; el.title = "再点一次删除";
+  setTimeout(() => { if (el.isConnected) { el.classList.remove("armed"); el.textContent = "×"; el.title = "删除这块板"; } }, 3000);
+}
 
 // ---------- keyboard ----------
 document.addEventListener("keydown", e => {
@@ -3353,8 +3387,8 @@ function renderTabs() {
     const n = b.groups.reduce((a, g) => a + g.refs.length, 0);
     const t = document.createElement("button");
     t.type = "button"; t.setAttribute("role", "tab"); t.setAttribute("aria-selected", S.b && S.b.key === b.key);
-    t.innerHTML = `<span class="k">${esc(b.name)}</span><span class="s">${esc(b.sub ? b.sub + " · " : "")}${n} 个</span>`;
-    t.onclick = () => openBoard(b.key);
+    t.innerHTML = `<span class="k">${esc(b.name)}</span><span class="s">${esc(b.sub ? b.sub + " · " : "")}${n} 个</span><span class="del" role="button" tabindex="0" title="删除这块板" aria-label="删除 ${esc(b.name)}">×</span>`;
+    t.onclick = e => { if (e.target.closest(".del")) { e.stopPropagation(); delStep(e.target.closest(".del"), b.key); return; } openBoard(b.key); };
     tabs.appendChild(t);
   }
   const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.innerHTML = '<span class="k">＋ 添加</span><span class="s">文件夹 / zip</span>';
@@ -3364,6 +3398,7 @@ function openBoard(key) {
   S.b = S.boards.find(b => b.key === key) || S.boards[0];
   S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.vb2 = null; S.split = false; S.splitForce = false; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
   S.pm = Object.fromEntries(S.b.parts.map(p => [p.r, p]));
+  showNotes([...(S.flash || []), ...(S.b.notes || [])]);
   S.netIdx = {};
   for (const p of S.b.parts) p.pads.forEach((pd, i) => { if (pd[1]) (S.netIdx[pd[1]] ||= []).push({ r: p.r, i, n: pd[0], s: p.tht ? "T" : p.s }); });
   for (const n in S.netIdx) S.netIdx[n].sort((a, b) => Enrich.natcmp(a.r, b.r) || a.i - b.i);
@@ -3384,7 +3419,7 @@ window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => s
     for (const b of stale) DB.del(b.key);
     saved = saved.filter(b => b.ver === IMPORT_VER);
     const names = stale.filter(b => b.key !== "demo#builtin").map(b => b.name);
-    if (names.length) showNotes([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
+    if (names.length) S.flash = ([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
   }
   if (saved.length) {
     S.boards = saved.sort((a, b) => (a.added || 0) - (b.added || 0));

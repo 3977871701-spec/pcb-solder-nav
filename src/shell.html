@@ -45,7 +45,11 @@ button, select { font: inherit; color: inherit; }
 .tabs button .s { font-size: 11px; color: var(--muted); }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
 .tabs button[aria-selected="true"] .s { color: inherit; opacity: .75; }
-.tabs .add { border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
+.tabs button { position: relative; padding-right: 26px; }
+.tabs .del { position: absolute; top: 3px; right: 4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; font-size: 13px; line-height: 18px; text-align: center; color: inherit; opacity: .45; cursor: pointer; }
+.tabs .del:hover { opacity: 1; background: var(--accent-soft); }
+.tabs .del.armed { opacity: 1; background: var(--accent); color: var(--panel); font-size: 11px; }
+.tabs .add { padding-right: 12px; border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }

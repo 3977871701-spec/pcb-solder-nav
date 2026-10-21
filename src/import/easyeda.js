@@ -163,7 +163,7 @@ globalThis.ImpEasyEDA = (() => {
   // gather every document from all EasyEDA files of a project and build one board per PCB document
   // items: strings or {text, name}; one board per PCB document (multi-board projects keep each board's own title)
   function parseProject(items) {
-    const pool = { foot: {}, dev: {}, pcbs: [] };
+    const pool = { foot: {}, dev: {}, pcbs: [], boards: {} };
     for (const it of items) for (const d of docs(typeof it === "string" ? it : it.text)) {
       d.src = typeof it === "string" ? "" : it.name || "";
       const type = String(d.head.docType || "").toUpperCase(), uuid = d.head.uuid;
@@ -174,12 +174,15 @@ globalThis.ImpEasyEDA = (() => {
       } else if (type === "DEVICE") {
         const meta = d.recs.find(r => r.type === "META");
         if (uuid) pool.dev[uuid] = { attrs: (meta && meta.b && meta.b.attributes) || {}, title: meta && meta.b && meta.b.title };
-      } else if (type === "PCB") pool.pcbs.push(d);
+      } else if (type === "BOARD") { const meta = d.recs.find(r => r.type === "META"); if (uuid) pool.boards[uuid] = (meta && meta.b && meta.b.title) || ""; }
+      else if (type === "PCB") pool.pcbs.push(d);
     }
     return pool.pcbs.map(p => {
       const meta = p.recs.find(r => r.type === "META"), board = build(p, pool);
       const withPads = board.parts.filter(q => q.pads.length && q.fp !== "PAD").length, comps = board.parts.filter(q => q.fp !== "PAD").length;
-      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", uuid: p.head.uuid, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
+      // a PCB document hangs under a BOARD (PCB + schematic); its title tells archived/old boards apart from the current one
+      const boardTitle = (meta && meta.b && pool.boards[meta.b.board]) || "";
+      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", boardTitle, uuid: p.head.uuid, time: +p.head.updateTime || 0, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
     });
   }
   return { parseProject, docs, isDoc, pathRuns };

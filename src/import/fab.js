@@ -129,7 +129,7 @@ globalThis.ImpFab = (() => {
     const comps = new Map();
     let cplInfo = null;
     if (inp.cpl && inp.cpl.rows.length) {
-      const al = alignCPL(inp.cpl, pads.filter(p => p.side !== "T" || true), padRefs) || { sc: 1, sy: 1, ox: 0, oy: 0, res: 0 };
+      const al = (pads.length && alignCPL(inp.cpl, pads, padRefs)) || { sc: 1, sy: 1, ox: 0, oy: 0, res: 0 }; // no copper (placement-only): nothing to align to
       cplInfo = al;
       if (Math.abs(al.ox) > 0.05 || Math.abs(al.oy) > 0.05) warn.push(`坐标文件与 Gerber 原点不同，已自动对齐（偏移 ${al.ox.toFixed(2)}, ${al.oy.toFixed(2)} mm）`);
       if (al.sc !== 1) warn.push(`坐标文件单位按 ${al.sc === 0.0254 ? "mil" : al.sc === 25.4 ? "inch" : "mm"} 处理`);

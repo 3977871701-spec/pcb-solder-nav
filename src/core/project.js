@@ -117,20 +117,33 @@ globalThis.Project = (() => {
     // EasyEDA: group docs by archive / directory
     const ee = {};
     for (const c of C.filter(c => c.kind === "easyeda")) (ee[c.entry.inArchive || c.dir] ||= []).push(c);
-    const noFoot = [];
+    const noFoot = [], archived = [], eeAll = [];
+    const ARCHIVE = /archive|历史|归档|废弃|作废|obsolete|deprecated/i;
     for (const [grp, list] of Object.entries(ee)) {
       try {
         const res = ImpEasyEDA.parseProject(list.map(c => ({ text: c.text(), name: c.path })));
-        const proj = stemOf(grp || "easyeda").replace(/^ProPrj_/, "").replace(/_\d{4}-\d{2}-\d{2}$/, "");
-        const good = res.filter(r => r.comps && r.padCoverage >= 0.5);
-        for (const r of res) if (r.comps && r.padCoverage < 0.5) noFoot.push(r.src || grp); // PCB without its footprints (bare .epcb snapshot)
-        for (const r of good) {
-          const own = r.title && !/^PCB\d*$/i.test(r.title) ? r.title : stemOf(r.src || grp || "easyeda");
-          add(r.board, { path: (r.src || grp) + "#" + (r.uuid || ""), name: good.length > 1 ? `${proj} · ${own}` : own, source: "嘉立创EDA专业版" });
+        for (const r of res) {
+          if (!r.comps) continue;
+          if (r.padCoverage < 0.5) { noFoot.push(r.src || grp); continue; } // PCB without its footprints (bare .epcb snapshot)
+          if (ARCHIVE.test(r.boardTitle) || ARCHIVE.test(r.title)) { archived.push(r.boardTitle || r.title); continue; } // boards the designer marked as history
+          eeAll.push({ ...r, grp });
         }
         designDirs.push(dirOf(list[0].path));
       } catch (err) { errors.push(`${grp}：${err.message}`); }
     }
+    // the same PCB document saved in several exports/backups: keep only the most recently edited copy
+    const eeKey = r => r.uuid || r.title, newest = {}, older = {};
+    for (const r of eeAll) { const k = eeKey(r), o = newest[k]; if (!o || r.time > o.time) { if (o) (older[k] ||= []).push(o); newest[k] = r; } else (older[k] ||= []).push(r); }
+    const eeKeep = Object.values(newest);
+    const projOf = r => stemOf(r.grp || "easyeda").replace(/^ProPrj_/, "").replace(/_\d{4}-\d{2}-\d{2}$/, "").replace(/_\d{8}_\d{4}$/, "");
+    for (const r of eeKeep) {
+      const own = r.title && !/^PCB\d*$/i.test(r.title) ? r.title : stemOf(r.src || r.grp || "easyeda");
+      const several = eeKeep.filter(x => x.grp === r.grp).length > 1;
+      add(r.board, { path: (r.src || r.grp) + "#" + (r.uuid || ""), name: several ? `${projOf(r)} · ${own}` : own, source: "嘉立创EDA专业版", time: r.time });
+    }
+    const day = t => t ? new Date(t).toISOString().slice(0, 10) : "";
+    for (const [k, list] of Object.entries(older)) { const n = newest[k]; notes.push(`${n.title || k} 有 ${list.length + 1} 个版本，用的是最新编辑的那份（${baseOf(n.src || n.grp)}${n.time ? "，" + day(n.time) : ""}），较旧的 ${list.map(r => baseOf(r.src || r.grp) + (r.time ? "（" + day(r.time) + "）" : "")).slice(0, 3).join("、")} 已跳过`); }
+    if (archived.length) notes.push(`跳过 ${archived.length} 块标记为历史/归档的板：${[...new Set(archived)].join("、")}`);
     if (noFoot.length) notes.push(`${noFoot.length} 个嘉立创 PCB 文档缺少封装数据（例如 ${baseOf(noFoot[0])}），已跳过。请在嘉立创EDA里用“文件 → 导出 → 工程”导出完整的 .epro2 再拖进来。`);
     for (const c of C.filter(c => c.kind === "easystd")) {
       try { add(ImpEasyStd.parse(JSON.parse(c.text()), baseOf(c.path)), { path: c.path, name: stemOf(c.path).replace(/^PCB_(PCB_)?/, ""), source: "嘉立创EDA标准版" }); designDirs.push(c.dir); }
@@ -197,6 +210,10 @@ globalThis.Project = (() => {
       if (Math.max(...xs) - Math.min(...xs) > 600 || Math.max(...ys) - Math.min(...ys) > 600) continue; // not board coordinates
       const area = dirOf(t.c.dir);
       if (covered(t.c.dir) || gdirs.some(d => isAncestor(t.c.dir, d) || isAncestor(d, t.c.dir) || isAncestor(area, d))) continue;
+      // a placement list for a board that a design file already describes (same designators): the design file wins
+      const cplRefs = new Set(t.cpl.rows.map(r => r.ref));
+      const twin = boards.find(bd => !bd.path.endsWith("#fab") && bd.board.parts.filter(p => cplRefs.has(p.r)).length >= 0.6 * Math.min(cplRefs.size, bd.board.parts.length));
+      if (twin) { notes.push(`坐标文件 ${baseOf(t.c.path)} 和设计文件里的 ${twin.name} 是同一块板（位号基本相同），已直接用设计文件`); continue; }
       const nt = near(t.c.dir, nets.map(c => ({ c })));
       let net = null; for (const n of nt) { try { net = n.c.kind === "fly" ? (x => x && { pads: x.pads, comps: x.comps })(Tables.flyprobe(n.c.text())) : { pads: Tables.ipc356(n.c.text()) }; if (net && net.pads) break; } catch (e) {} }
       const b = ImpFab.build({ layers: {}, holes: [], cpl: t.cpl, net });

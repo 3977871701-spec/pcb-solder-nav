@@ -50,7 +50,7 @@ async function walkEntry(e, prefix = "") {
 }
 const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
 // bump when import rules change: boards parsed by an older version are dropped on load and must be re-imported
-const IMPORT_VER = 3;
+const IMPORT_VER = 4;
 const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
   if (!list.length) return;
@@ -76,7 +76,10 @@ async function ingest(list) {
   const newKeys = new Set(added);
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
-  showNotes(msgs);
+  S.flash = null;
+  // import notes belong to the boards this import produced, so switching tabs shows the right ones
+  for (const k of added) { const b = S.boards.find(x => x.key === k); if (b) { b.notes = msgs; DB.put(b); } }
+  if (!firstKey) showNotes(msgs);
   const from = [...roots].join("、");
   if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
@@ -583,10 +586,17 @@ $("#rmAll").onclick = e => twoStep(e.currentTarget, "清空全部板子", () => 
   for (const b of S.boards) DB.del(b.key);
   S.boards = []; doneAll = {}; saveDone(); showNotes([]); showEmpty();
 });
-$("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => {
-  const k = S.b.key; DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
-  if (S.boards.length) openBoard(S.boards[0].key); else showEmpty();
-});
+function removeBoard(k) {
+  DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
+  if (!S.boards.length) showEmpty(); else if (!S.b || S.b.key === k) openBoard(S.boards[0].key); else renderTabs();
+}
+$("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => removeBoard(S.b.key));
+// × on a tab: first click asks, second click deletes
+function delStep(el, key) {
+  if (el.classList.contains("armed")) { removeBoard(key); toast("已删除这块板"); return; }
+  el.classList.add("armed"); el.textContent = "删除？"; el.title = "再点一次删除";
+  setTimeout(() => { if (el.isConnected) { el.classList.remove("armed"); el.textContent = "×"; el.title = "删除这块板"; } }, 3000);
+}
 
 // ---------- keyboard ----------
 document.addEventListener("keydown", e => {
@@ -613,8 +623,8 @@ function renderTabs() {
     const n = b.groups.reduce((a, g) => a + g.refs.length, 0);
     const t = document.createElement("button");
     t.type = "button"; t.setAttribute("role", "tab"); t.setAttribute("aria-selected", S.b && S.b.key === b.key);
-    t.innerHTML = `<span class="k">${esc(b.name)}</span><span class="s">${esc(b.sub ? b.sub + " · " : "")}${n} 个</span>`;
-    t.onclick = () => openBoard(b.key);
+    t.innerHTML = `<span class="k">${esc(b.name)}</span><span class="s">${esc(b.sub ? b.sub + " · " : "")}${n} 个</span><span class="del" role="button" tabindex="0" title="删除这块板" aria-label="删除 ${esc(b.name)}">×</span>`;
+    t.onclick = e => { if (e.target.closest(".del")) { e.stopPropagation(); delStep(e.target.closest(".del"), b.key); return; } openBoard(b.key); };
     tabs.appendChild(t);
   }
   const add = document.createElement("button"); add.type = "button"; add.className = "add"; add.innerHTML = '<span class="k">＋ 添加</span><span class="s">文件夹 / zip</span>';
@@ -624,6 +634,7 @@ function openBoard(key) {
   S.b = S.boards.find(b => b.key === key) || S.boards[0];
   S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.vb2 = null; S.split = false; S.splitForce = false; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
   S.pm = Object.fromEntries(S.b.parts.map(p => [p.r, p]));
+  showNotes([...(S.flash || []), ...(S.b.notes || [])]);
   S.netIdx = {};
   for (const p of S.b.parts) p.pads.forEach((pd, i) => { if (pd[1]) (S.netIdx[pd[1]] ||= []).push({ r: p.r, i, n: pd[0], s: p.tht ? "T" : p.s }); });
   for (const n in S.netIdx) S.netIdx[n].sort((a, b) => Enrich.natcmp(a.r, b.r) || a.i - b.i);
@@ -644,7 +655,7 @@ window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => s
     for (const b of stale) DB.del(b.key);
     saved = saved.filter(b => b.ver === IMPORT_VER);
     const names = stale.filter(b => b.key !== "demo#builtin").map(b => b.name);
-    if (names.length) showNotes([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
+    if (names.length) S.flash = ([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
   }
   if (saved.length) {
     S.boards = saved.sort((a, b) => (a.added || 0) - (b.added || 0));
