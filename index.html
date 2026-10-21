@@ -46,7 +46,7 @@ button, select { font: inherit; color: inherit; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
 .tabs button[aria-selected="true"] .s { color: inherit; opacity: .75; }
 .tabs .add { border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
-.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
 @media (max-width: 900px) { .stage { position: relative; top: 0; } }
@@ -61,7 +61,7 @@ button, select { font: inherit; color: inherit; }
 select.tbtn { padding: 4px 6px; background: var(--panel); }
 .spacer { flex: 1; }
 .hint { color: var(--muted); font-size: 12px; }
-.svgwrap { position: relative; height: min(74vh, 820px); touch-action: none; cursor: grab; }
+.svgwrap { position: relative; height: max(420px, calc(100vh - 150px)); touch-action: none; cursor: grab; }
 @media (max-width: 900px) { .svgwrap { height: 62vh; } }
 .svgwrap.drag { cursor: grabbing; }
 .panes { display: flex; height: 100%; }
@@ -107,7 +107,8 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .pinmode .lbl { opacity: .45; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
-.card { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px var(--shadow); display: grid; gap: 4px; font-size: 13px; cursor: auto; max-width: 540px; max-height: 48%; overflow-y: auto; }
+.card { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 5; background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 24px var(--shadow); display: grid; gap: 4px; font-size: 13px; max-height: calc(100vh - 24px); overflow-y: auto; }
+@media (max-width: 900px) { .card { position: relative; top: 0; max-height: none; } }
 .card .row1 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding-right: 20px; }
 .card .ref { font-family: var(--font-mono); font-weight: 600; font-size: 18px; color: var(--accent); }
 .card .nm { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
@@ -267,7 +268,6 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <div class="pane" id="paneA"><span class="ptag" id="tagA">顶面</span><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg></div>
         <div class="pane" id="paneB" hidden><span class="ptag" id="tagB">底面（镜像）</span><svg id="board2" xmlns="http://www.w3.org/2000/svg"></svg></div>
       </div>
-      <div class="card" id="card" hidden></div>
     </div>
     <div class="legend">
       <span><i style="background:var(--pad)"></i>焊盘</span>
@@ -296,6 +296,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <button type="button" class="tbtn" id="rmAll">清空全部板子</button>
       </div>
     </div>
+    <div class="card" id="card" hidden></div>
     <section class="step" id="tpSec" hidden>
       <h2>测试点与引脚</h2>
       <p>点板上任意焊盘：卡片显示它是哪个器件第几脚、接哪个网络，同网络的其他焊盘标成紫色。万用表通断档一支表笔放在选中焊盘，另一支放任一紫色焊盘应导通。</p>
