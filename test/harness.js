@@ -4,7 +4,7 @@ const SRC = path.join(__dirname, "..", "src");
 const ORDER = ["core/geom.js", "core/files.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js", "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "core/project.js", "enrich.js"];
 for (const f of ORDER) if (fs.existsSync(path.join(SRC, f))) require(path.join(SRC, f));
 
-// reference: JSON written by scripts/pcbnew_dump.py  → {fps:[{ref, side, pads:[{n, net, poly:[[[x,y]...]]}]}]}
+// reference: JSON written by test/pcbnew_dump.py  → {fps:[{ref, side, pads:[{n, net, poly:[[[x,y]...]]}]}]}
 function compare(board, refJson, { tolPos = 0.02, label = "" } = {}) {
   const ref = JSON.parse(fs.readFileSync(refJson, "utf8"));
   let n = 0, worst = 0, worstAt = "", sizeWorst = 0, netBad = [], missingParts = [], missingPads = [], sideBad = [];

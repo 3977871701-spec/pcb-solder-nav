@@ -18,7 +18,7 @@ const R = f => fs.readFileSync(f, "utf8");
   const ee = ImpEasyEDA.parseProject([R(`${S}/lceda/CZL00_PCB01_DEV_V1.1.epru`)])[0].board;
   cmpBoards(al, ee, "嘉立创EDA .epru vs Allegro IPC-2581 (CZL00 V1.1)");
   cmpBoards(al, (await run([`${S}/fabset_v11`], { quiet: true })).boards[0].board, "Gerber+CPL+IPC-356 (Allegro) vs Allegro IPC-2581");
-  const v01 = (await run(["D:/ghost_work/cadence/V01_R9_Cadence_20260824/source_epro2/01_PCB源文件"], { quiet: true })).boards[0].board;
+  const v01 = (await run([`${S}/v01_epro2`], { quiet: true })).boards[0].board;
   cmpFly(v01, Tables.flyprobe(R(`${S}/v01_flyprobe.json`)), "嘉立创EDA .epro2 vs JLC flying probe (V01_R9) [nets renamed between revisions]");
   for (const f of ["HiFive1.B01", "eDP_adapter_dvt1"]) cmpBoards(ImpKiCad.parse(R(`${S}/altium/${f}.kicad_pcb`), f), ImpAltium.parse(new Uint8Array(fs.readFileSync(`${S}/altium/${f}.PcbDoc`)), f), `Altium .PcbDoc ${f} vs KiCad importer`);
 })();
