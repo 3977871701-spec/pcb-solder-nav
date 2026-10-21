@@ -2,7 +2,13 @@
 *.kicad_pro
 *.kicad_prl
 *.zip
+*.PcbDoc
+*.epro
+*.epro2
+*.epru
+*.brd
 *-bom*.csv
 *-cpl*.csv
+samples/
 .DS_Store
 Thumbs.db

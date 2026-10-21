@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>KiCad 焊接导航</title>
+<title>PCB 焊接导航</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* Layout: workbench split — board drawing (sticky, pan/zoom) on the left, solder-step checklist on the right; stacks on phones. */
 :root {
@@ -150,6 +149,15 @@ svg#board { width: 100%; height: 100%; display: block; user-select: none; }
 .tps { display: flex; flex-wrap: wrap; gap: 6px; }
 .tps button { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
 .tps button span { color: var(--net); }
+.warnbox { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 9px; display: grid; gap: 2px; }
+.notes { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; overflow-wrap: anywhere; }
+.notes ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.drop .notes { width: 100%; }
+.fmt { border-collapse: collapse; font-size: 13px; width: 100%; }
+.fmt th { text-align: left; font-weight: 600; padding: 4px 10px 4px 0; vertical-align: top; white-space: nowrap; }
+.fmt td { padding: 4px 0; color: var(--muted); }
+.fmt tr + tr th, .fmt tr + tr td { border-top: 1px solid var(--line); }
+@media (max-width: 520px) { .fmt th { white-space: normal; } }
 .foot { color: var(--muted); font-size: 12px; max-width: 70ch; display: grid; gap: 6px; }
 .foot p { margin: 0; }
 kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); color: var(--fg); }
@@ -169,12 +177,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 </style>
 
 <input type="file" id="inDir" webkitdirectory directory multiple hidden>
-<input type="file" id="inFiles" multiple accept=".kicad_pcb,.csv,.zip" hidden>
+<input type="file" id="inFiles" multiple hidden>
 
 <div class="top">
   <div class="brand">
-    <h1>KiCad 焊接导航</h1>
-    <p>拖入 KiCad 工程文件夹，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。文件只在你的浏览器里解析，不会上传。</p>
+    <h1>PCB 焊接导航</h1>
+    <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。支持 KiCad、嘉立创EDA、Altium、Cadence Allegro、ODB++ 和 Gerber。文件只在你的浏览器里解析，不会上传。</p>
   </div>
   <div class="tabs" role="tablist" id="tabs" hidden></div>
 </div>
@@ -182,27 +190,35 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 <section class="empty" id="empty">
   <div class="drop" id="drop">
     <h2>把工程文件夹拖到这里</h2>
-    <p>会自动找出里面所有的 <code>.kicad_pcb</code>，同一目录下文件名带 “bom” 的 CSV 会自动当作 BOM 合并（嘉立创 BOM、KiCad 导出的 BOM 都行）。也可以直接拖 zip 压缩包。</p>
+    <p>文件夹、zip、单个文件都行。里面有几块板就读出几块；同目录的 BOM、坐标文件、网表会自动配上。</p>
     <div class="row">
       <button type="button" class="tbtn primary" id="pickDir">选择文件夹</button>
-      <button type="button" class="tbtn" id="pickFiles">选择文件 / zip</button>
+      <button type="button" class="tbtn" id="pickFiles">选择文件 / 压缩包</button>
       <button type="button" class="tbtn" id="loadDemo">打开示例板</button>
     </div>
     <p class="hint" id="loadMsg"></p>
+    <div class="notes" id="notesEmpty" hidden></div>
   </div>
   <div class="howto">
-    <h3>能读什么</h3>
+    <h3>能读的文件</h3>
+    <table class="fmt">
+      <tr><th>KiCad</th><td><code>.kicad_pcb</code>（6 ~ 10）</td></tr>
+      <tr><th>嘉立创EDA 专业版</th><td>工程 <code>.epro</code> / <code>.epro2</code> / 备份 <code>.epru</code>；或 Gerber 包（带飞针文件）</td></tr>
+      <tr><th>Altium Designer</th><td><code>.PcbDoc</code>；或 IPC-2581 / ODB++ / Gerber + Pick Place</td></tr>
+      <tr><th>Cadence Allegro / OrCAD</th><td>导出的 IPC-2581（File → Export → IPC 2581）；或 Gerber(.art) + 坐标 + IPC-356。<code>.brd</code> 原文件是加密格式，读不了</td></tr>
+      <tr><th>PADS / 其他</th><td>IPC-2581、ODB++，或 Gerber + 坐标文件</td></tr>
+    </table>
+    <h3>文件组合说明</h3>
     <ul>
-      <li>KiCad 6 ~ 10 的 <code>.kicad_pcb</code>：器件位置、焊盘形状、网络、走线、板框、丝印框</li>
-      <li>器件属性：Value、LCSC / MPN 字段、DNP、不进 BOM、所属原理图页</li>
-      <li>可选 BOM：带 <code>Designator</code> / <code>Reference</code> 列的 CSV，用 Comment、LCSC 列补全名称和料号</li>
-      <li>zip 里的工程也能读（需要联网加载解压库）</li>
+      <li>设计文件（KiCad / 嘉立创 / Altium / IPC-2581 / ODB++）信息最全：焊盘、引脚号、网络都有</li>
+      <li>只有 Gerber 时，需要配上坐标文件（Pick and Place / CPL）才能知道器件；再配上 IPC-356 网表或嘉立创飞针文件，就能查引脚和网络</li>
+      <li>BOM 可以是 CSV 或 Excel（.xlsx），用 Comment / LCSC 列补全名称和料号</li>
     </ul>
     <h3>读进来以后</h3>
     <ul>
       <li>按焊接顺序分步：细间距芯片 → 小封装 → 阻容 → 有极性件 → 大件 → 开关 → 底面 → 插件</li>
       <li>标出 1 脚、二极管阴极、电解/钽电容正极，并用文字说出朝哪边</li>
-      <li>“测引脚”模式：点任意焊盘看是哪个器件第几脚、接什么网络、和哪些点应导通</li>
+      <li>“测引脚”：点任意焊盘看是哪个器件第几脚、接什么网络、和哪些点应导通</li>
       <li>勾选进度和读入的板子保存在本机浏览器，下次打开还在</li>
     </ul>
   </div>
@@ -258,6 +274,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <div class="nums" id="nums"></div>
       <div class="bar"><span id="bar"></span></div>
       <div class="src" id="src"></div>
+      <div class="warnbox" id="warn" hidden></div>
       <div class="search">
         <input id="q" type="search" placeholder="位号 C14 / 引脚 U1.23 / 网络 GND" autocomplete="off">
         <button type="button" class="tbtn" id="clr">清除</button>
@@ -273,10 +290,11 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <p>点板上任意焊盘：卡片显示它是哪个器件第几脚、接哪个网络，同网络的其他焊盘标成紫色。万用表通断档一支表笔放在选中焊盘，另一支放任一紫色焊盘应导通。</p>
       <div class="tps" id="tps"></div>
     </section>
+    <div class="notes" id="notes" hidden></div>
     <div id="steps" class="side"></div>
     <div class="foot">
       <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
-      <p>极性按 KiCad / 立创封装惯例判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
+      <p>极性按常见封装库惯例（KiCad、立创、Altium）判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
       <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
     </div>
   </aside>
@@ -286,8 +304,399 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 <div class="toast" id="toast" hidden></div>
 
 <script>
-/*PARSER-START*/
-const KiPCB = (() => {
+// ===== core/geom.js =====
+// Shared geometry helpers. Board model units: millimetres, SVG orientation (y grows downward).
+globalThis.Geom = (() => {
+  const f3 = v => { const r = Math.round(v * 1000) / 1000; return Object.is(r, -0) ? 0 : r; };
+  const P = p => f3(p[0]) + " " + f3(p[1]);
+  const polyD = pts => pts.length ? "M" + pts.map(P).join("L") + "Z" : "";
+  const lineD = pts => pts.length ? "M" + pts.map(P).join("L") : "";
+  const circ = (cx, cy, r, n = 24) => Array.from({ length: n }, (_, k) => [cx + r * Math.cos(k * 2 * Math.PI / n), cy + r * Math.sin(k * 2 * Math.PI / n)]);
+  const circleD = (cx, cy, r) => `M${P([cx - r, cy])}a${f3(r)} ${f3(r)} 0 1 0 ${f3(2 * r)} 0a${f3(r)} ${f3(r)} 0 1 0 ${f3(-2 * r)} 0`;
+  // KiCad-style rotation (y down, positive angle turns counter-clockwise on screen)
+  const rotK = (x, y, deg) => { if (!deg) return [x, y]; const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [x * c + y * s, -x * s + y * c]; };
+  // Math rotation (y up, counter-clockwise)
+  const rotM = (x, y, deg) => { if (!deg) return [x, y]; const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [x * c - y * s, x * s + y * c]; };
+  function arcD(a, m, b) {
+    const [x1, y1] = a, [x2, y2] = m, [x3, y3] = b;
+    const d = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+    if (Math.abs(d) < 1e-9) return `M${P(a)}L${P(b)}`;
+    const ux = ((x1 * x1 + y1 * y1) * (y2 - y3) + (x2 * x2 + y2 * y2) * (y3 - y1) + (x3 * x3 + y3 * y3) * (y1 - y2)) / d;
+    const uy = ((x1 * x1 + y1 * y1) * (x3 - x2) + (x2 * x2 + y2 * y2) * (x1 - x3) + (x3 * x3 + y3 * y3) * (x2 - x1)) / d;
+    const r = Math.hypot(x1 - ux, y1 - uy);
+    const sweep = ((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)) > 0 ? 1 : 0;
+    const t = q => Math.atan2(q[1] - uy, q[0] - ux), TAU = 2 * Math.PI, nm = v => ((v % TAU) + TAU) % TAU;
+    const span = sweep ? nm(t(b) - t(a)) : nm(t(a) - t(b));
+    return `M${P(a)}A${f3(r)} ${f3(r)} 0 ${span > Math.PI ? 1 : 0} ${sweep} ${P(b)}`;
+  }
+  // points along an arc from a to b around centre c; cw = clockwise in the coordinate system given
+  function arcPts(a, b, c, cw, stepDeg = 10) {
+    const r = Math.hypot(a[0] - c[0], a[1] - c[1]);
+    let t0 = Math.atan2(a[1] - c[1], a[0] - c[0]), t1 = Math.atan2(b[1] - c[1], b[0] - c[0]);
+    const TAU = 2 * Math.PI;
+    let sw = cw ? t0 - t1 : t1 - t0; sw = ((sw % TAU) + TAU) % TAU;
+    if (sw < 1e-9 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) sw = TAU;
+    const n = Math.max(2, Math.ceil(sw / (stepDeg * Math.PI / 180)));
+    const out = [];
+    for (let k = 1; k <= n; k++) { const t = t0 + (cw ? -1 : 1) * sw * k / n; out.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]); }
+    return out;
+  }
+  function rrect(w, h, r, seg = 4) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); if (r < 1e-4) return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
+    const out = [], cs = [[w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, 90], [-w / 2 + r, -h / 2 + r, 180], [w / 2 - r, -h / 2 + r, 270]];
+    for (const [cx, cy, a0] of cs) for (let k = 0; k <= seg; k++) { const a = (a0 + 90 * k / seg) * Math.PI / 180; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  const rect = (w, h) => [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
+  function bboxOf(pts, bb = [1e9, 1e9, -1e9, -1e9]) {
+    for (const q of pts) { if (q[0] < bb[0]) bb[0] = q[0]; if (q[1] < bb[1]) bb[1] = q[1]; if (q[0] > bb[2]) bb[2] = q[0]; if (q[1] > bb[3]) bb[3] = q[1]; }
+    return bb;
+  }
+  const validBB = bb => bb && bb[0] <= bb[2] && bb[1] <= bb[3];
+  // pad record used by the renderer: [num, net, pathD, kind(0 smd / 1 plated hole / 2 npth), cx, cy, minSize]
+  function padRec(num, net, polys, kind, holeD = "") {
+    const all = polys.flat(); const bb = bboxOf(all);
+    const d = polys.map(polyD).join("") + holeD;
+    return [String(num ?? ""), net || "", d, kind, f3((bb[0] + bb[2]) / 2), f3((bb[1] + bb[3]) / 2), f3(Math.min(bb[2] - bb[0], bb[3] - bb[1])), bb];
+  }
+  // empty board skeleton every importer fills in
+  const newBoard = () => ({ bbox: null, edges: "", silk: { F: "", B: "" }, tracks: { F: [], B: [] }, vias: [], parts: [] });
+  function finishBoard(b, edgePts) {
+    let bb = edgePts && edgePts.length ? bboxOf(edgePts) : null;
+    if (!validBB(bb)) { bb = [1e9, 1e9, -1e9, -1e9]; for (const p of b.parts) bboxOf([[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]], bb); }
+    if (!validBB(bb)) bb = [0, 0, 50, 50];
+    b.bbox = bb.map(f3);
+    for (const p of b.parts) for (const pd of p.pads) pd.length = 7; // drop internal bbox
+    return b;
+  }
+  // group tracks by width: input [[w, d], ...] → [[w, joinedD]]
+  function groupTracks(list) { const m = {}; for (const [w, d] of list) (m[f3(w)] ||= []).push(d); return Object.entries(m).map(([w, a]) => [w, a.join("")]); }
+  return { f3, P, polyD, lineD, circ, circleD, rotK, rotM, arcD, arcPts, rrect, rect, bboxOf, validBB, padRec, newBoard, finishBoard, groupTracks };
+})();
+
+// ===== core/files.js =====
+// File plumbing with no external libraries: text decoding, zip / gzip / tar / unix-compress (.Z), XML, CSV, XLSX.
+globalThis.Files = (() => {
+  // ---------- text ----------
+  function decodeText(u8) {
+    if (typeof u8 === "string") return u8;
+    if (u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) return new TextDecoder("utf-8").decode(u8.subarray(3));
+    if (u8[0] === 0xFF && u8[1] === 0xFE) return new TextDecoder("utf-16le").decode(u8.subarray(2));
+    if (u8[0] === 0xFE && u8[1] === 0xFF) return new TextDecoder("utf-16be").decode(u8.subarray(2));
+    // UTF-16 without BOM: every other byte is zero in ASCII-heavy text
+    if (u8.length > 8 && u8[1] === 0 && u8[3] === 0 && u8[0] !== 0) return new TextDecoder("utf-16le").decode(u8);
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(u8); }
+    catch (e) { try { return new TextDecoder("gb18030").decode(u8); } catch (e2) { return new TextDecoder("latin1").decode(u8); } }
+  }
+  const startsWith = (u8, sig) => sig.every((b, i) => u8[i] === b);
+
+  // ---------- compression ----------
+  async function pipe(u8, fmt) {
+    const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream(fmt));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  const inflateRaw = u8 => pipe(u8, "deflate-raw");
+  const gunzip = u8 => pipe(u8, "gzip");
+
+  // zip: returns [{name, size, read: async () => Uint8Array}]
+  function unzip(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error("zip 文件损坏或不是 zip");
+    let count = dv.getUint16(eocd + 10, true), cd = dv.getUint32(eocd + 16, true);
+    if (cd === 0xFFFFFFFF || count === 0xFFFF) { // zip64
+      const loc = eocd - 20;
+      if (loc >= 0 && dv.getUint32(loc, true) === 0x07064b50) { const z64 = Number(dv.getBigUint64(loc + 8, true)); count = Number(dv.getBigUint64(z64 + 32, true)); cd = Number(dv.getBigUint64(z64 + 48, true)); }
+    }
+    const out = [];
+    for (let k = 0, p = cd; k < count && dv.getUint32(p, true) === 0x02014b50; k++) {
+      const flags = dv.getUint16(p + 8, true), method = dv.getUint16(p + 10, true);
+      let csize = dv.getUint32(p + 20, true), size = dv.getUint32(p + 24, true);
+      const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      let lho = dv.getUint32(p + 42, true);
+      const nameBytes = u8.subarray(p + 46, p + 46 + nl);
+      if (csize === 0xFFFFFFFF || size === 0xFFFFFFFF || lho === 0xFFFFFFFF) { // zip64 extra
+        let e = p + 46 + nl; const end = e + xl;
+        while (e < end) { const id = dv.getUint16(e, true), len = dv.getUint16(e + 2, true); if (id === 1) { let q = e + 4; if (size === 0xFFFFFFFF) { size = Number(dv.getBigUint64(q, true)); q += 8; } if (csize === 0xFFFFFFFF) { csize = Number(dv.getBigUint64(q, true)); q += 8; } if (lho === 0xFFFFFFFF) lho = Number(dv.getBigUint64(q, true)); } e += 4 + len; }
+      }
+      const name = (flags & 0x800) ? new TextDecoder().decode(nameBytes) : decodeText(nameBytes);
+      p += 46 + nl + xl + cl;
+      if (name.endsWith("/")) continue;
+      const lnl = dv.getUint16(lho + 26, true), lxl = dv.getUint16(lho + 28, true), start = lho + 30 + lnl + lxl;
+      const data = u8.subarray(start, start + csize);
+      out.push({ name: name.replace(/\\/g, "/"), size, read: async () => method === 0 ? data : method === 8 ? inflateRaw(data) : Promise.reject(new Error("不支持的压缩方式 " + method)) });
+    }
+    return out;
+  }
+  // tar: returns [{name, size, read}]
+  function untar(u8) {
+    const out = []; let p = 0, longName = null, paxPath = null;
+    const str = (a, b) => { let s = ""; for (let i = a; i < b && u8[i]; i++) s += String.fromCharCode(u8[i]); return s; };
+    while (p + 512 <= u8.length) {
+      if (u8[p] === 0) break;
+      const name = str(p, p + 100), size = parseInt(str(p + 124, p + 136).trim() || "0", 8), type = String.fromCharCode(u8[p + 156] || 48);
+      const prefix = str(p + 257, p + 263) === "ustar" ? str(p + 345, p + 500) : "";
+      const body = u8.subarray(p + 512, p + 512 + size);
+      if (type === "L") longName = new TextDecoder().decode(body).replace(/\0.*$/, "");
+      else if (type === "x") { const m = new TextDecoder().decode(body).match(/\d+ path=([^\n]*)\n/); paxPath = m ? m[1] : null; }
+      else if (type === "0" || type === "\0" || type === "7") {
+        const full = paxPath || longName || (prefix ? prefix + "/" + name : name);
+        out.push({ name: full, size, read: async () => body });
+        longName = paxPath = null;
+      } else { longName = paxPath = null; }
+      p += 512 + Math.ceil(size / 512) * 512;
+    }
+    return out;
+  }
+  // unix compress (.Z, LZW) — ODB++ exporters often compress feature files this way
+  function unZ(src) {
+    if (src[0] !== 0x1f || src[1] !== 0x9d) throw new Error("not .Z");
+    const maxbits = src[2] & 0x1f, block = (src[2] & 0x80) !== 0, maxmax = 1 << maxbits;
+    const prefix = new Uint32Array(maxmax), suffix = new Uint8Array(maxmax), stack = new Uint8Array(maxmax);
+    for (let i = 0; i < 256; i++) suffix[i] = i;
+    const data = src.subarray(3), totalBits = data.length * 8, out = [];
+    let nbits = 9, maxcode = (1 << nbits) - 1, mask = maxcode, free = block ? 257 : 256, pos = 0, origin = 0, oldcode = -1, finchar = 0;
+    const align = () => { const g = nbits * 8; pos = origin + Math.ceil((pos - origin) / g) * g; origin = pos; };
+    while (pos + nbits <= totalBits) {
+      if (free > maxcode) { align(); nbits++; maxcode = nbits === maxbits ? maxmax : (1 << nbits) - 1; mask = (1 << nbits) - 1; if (pos + nbits > totalBits) break; }
+      const byte = pos >> 3;
+      let code = ((data[byte] | (data[byte + 1] << 8) | (data[byte + 2] << 16)) >> (pos & 7)) & mask; pos += nbits;
+      if (oldcode === -1) { if (code >= 256) break; out.push(code); finchar = oldcode = code; continue; }
+      if (code === 256 && block) { free = 257; align(); nbits = 9; maxcode = mask = (1 << nbits) - 1; oldcode = -1; continue; }
+      const incode = code; let sp = maxmax;
+      if (code >= free) { stack[--sp] = finchar; code = oldcode; }
+      while (code >= 256) { stack[--sp] = suffix[code]; code = prefix[code]; }
+      stack[--sp] = finchar = suffix[code];
+      for (let i = sp; i < maxmax; i++) out.push(stack[i]);
+      if (free < maxmax) { prefix[free] = oldcode; suffix[free] = finchar; free++; }
+      oldcode = incode;
+    }
+    return Uint8Array.from(out);
+  }
+
+  // ---------- XML (attributes + text; enough for IPC-2581 and XLSX) ----------
+  const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  const unesc = s => s.indexOf("&") < 0 ? s : s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e] ?? m));
+  function xml(src) {
+    const root = { n: "#root", a: {}, c: [], t: "" }, stack = [root];
+    const re = /<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<\/([^\s>]+)\s*>|<([^\s/>]+)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/g;
+    const attrRe = /([^\s=/>]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+    let m;
+    while ((m = re.exec(src))) {
+      const top = stack[stack.length - 1];
+      if (m[1] !== undefined) top.t += m[1];
+      else if (m[2]) { if (stack.length > 1) stack.pop(); }
+      else if (m[3]) {
+        const name = m[3].includes(":") ? m[3].split(":").pop() : m[3];
+        const node = { n: name, a: {}, c: [], t: "" };
+        if (m[4]) { let a; attrRe.lastIndex = 0; while ((a = attrRe.exec(m[4]))) { const k = a[1].includes(":") && !a[1].startsWith("xmlns") ? a[1].split(":").pop() : a[1]; node.a[k] = unesc(a[3] ?? a[4]); } }
+        top.c.push(node);
+        if (!m[5]) stack.push(node);
+      } else if (m[6] !== undefined && stack.length > 1 && /\S/.test(m[6])) top.t += unesc(m[6]);
+    }
+    return root;
+  }
+  const X = {
+    kid: (n, name) => n && n.c.find(x => x.n === name),
+    kids: (n, name) => n ? n.c.filter(x => x.n === name) : [],
+    find(n, name) { if (!n) return null; for (const c of n.c) { if (c.n === name) return c; const f = X.find(c, name); if (f) return f; } return null; },
+    findAll(n, name, out = []) { if (!n) return out; for (const c of n.c) { if (c.n === name) out.push(c); X.findAll(c, name, out); } return out; },
+    text(n) { return n ? n.t + n.c.map(X.text).join("") : ""; },
+  };
+
+  // ---------- CSV ----------
+  function csv(text) {
+    text = text.replace(/^﻿/, "");
+    const first = text.slice(0, 2000).split(/\r?\n/).find(l => l.trim()) || "";
+    const cnt = ch => (first.match(new RegExp("\\" + ch, "g")) || []).length;
+    const delim = [",", "\t", ";"].sort((a, b) => cnt(b) - cnt(a))[0];
+    const rows = []; let row = [], f = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"' && f.trim() === "") { q = true; f = ""; }
+      else if (c === delim) { row.push(f); f = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+      else f += c;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows.map(r => r.map(x => x.trim())).filter(r => r.some(x => x));
+  }
+  // ---------- XLSX → rows of first sheet ----------
+  async function xlsx(u8) {
+    const entries = unzip(u8), get = async n => { const e = entries.find(x => x.name.toLowerCase() === n.toLowerCase()); return e ? decodeText(await e.read()) : null; };
+    const ss = [];
+    const sst = await get("xl/sharedStrings.xml");
+    if (sst) for (const si of X.findAll(xml(sst), "si")) ss.push(X.findAll(si, "t").map(t => t.t).join(""));
+    let sheetPath = "xl/worksheets/sheet1.xml";
+    const wb = await get("xl/workbook.xml"), rels = await get("xl/_rels/workbook.xml.rels");
+    if (wb && rels) { const s1 = X.find(xml(wb), "sheet"); const rid = s1 && (s1.a.id || s1.a["r:id"]); const rel = rid && X.findAll(xml(rels), "Relationship").find(r => r.a.Id === rid); if (rel) sheetPath = "xl/" + rel.a.Target.replace(/^\/?xl\//, "").replace(/^\//, ""); }
+    const sh = await get(sheetPath); if (!sh) return [];
+    const colIdx = r => { let n = 0; for (const ch of r.replace(/\d+/g, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+    const rows = [];
+    for (const r of X.findAll(xml(sh), "row")) {
+      const row = [];
+      for (const c of X.kids(r, "c")) {
+        const t = c.a.t, v = X.kid(c, "v"), is = X.kid(c, "is");
+        let val = t === "s" ? ss[+((v && v.t) || 0)] ?? "" : t === "inlineStr" ? X.findAll(is, "t").map(x => x.t).join("") : (v ? v.t : "");
+        row[c.a.r ? colIdx(c.a.r) : row.length] = String(val ?? "").trim();
+      }
+      for (let i = 0; i < row.length; i++) if (row[i] === undefined) row[i] = "";
+      if (row.some(x => x)) rows.push(row);
+    }
+    return rows;
+  }
+  return { decodeText, startsWith, inflateRaw, gunzip, unzip, untar, unZ, xml, X, csv, xlsx, unesc };
+})();
+
+// ===== core/tables.js =====
+// Tabular inputs: BOM, pick-and-place (CPL / 坐标文件), IPC-D-356 netlist, JLC flying-probe JSON.
+globalThis.Tables = (() => {
+  const low = s => String(s ?? "").trim().toLowerCase();
+  const findCol = (H, res) => { for (const re of res) { const i = H.findIndex(h => re.test(h)); if (i >= 0) return i; } return -1; };
+  const splitRefs = s => String(s || "").split(/[,\s;，]+/).map(x => x.trim()).filter(Boolean).flatMap(expandRange);
+  // "R1-R4" style ranges used by some BOMs
+  function expandRange(t) {
+    const m = t.match(/^([A-Za-z_]+)(\d+)[-~]\1?(\d+)$/);
+    if (!m || +m[3] - +m[2] > 500 || +m[3] < +m[2]) return [t];
+    return Array.from({ length: +m[3] - +m[2] + 1 }, (_, k) => m[1] + (+m[2] + k));
+  }
+
+  // ---------- BOM ----------
+  function bom(rows) {
+    for (let h = 0; h < Math.min(12, rows.length); h++) {
+      const H = rows[h].map(low);
+      const di = findCol(H, [/^(designators?|references?|refs?|refdes|ref des|位号|标号|元件位号|器件位号)$/, /^(designator|reference|位号)/]);
+      if (di < 0) continue;
+      const ci = findCol(H, [/^(comment|名称|注释)$/, /^(value|值|参数|规格)$/, /^(description|描述)$/]);
+      const li = findCol(H, [/lcsc|jlcpcb|^jlc|supplier part|立创|商城编号|供应商编号/]);
+      const mi = findCol(H, [/^(mpn|manufacturer part|manufacturer_part_number|mfr ?p\/?n|mfr part|partnumber|part number|型号|料号|厂家型号|制造商型号)/]);
+      const fi = findCol(H, [/^(footprint|封装|package|pattern)$/]);
+      const xi = findCol(H, [/^(dnp|populate|do not (populate|place)|不贴|贴片)$/]);
+      if (ci < 0 && li < 0 && mi < 0) return null; // a CPL or something else
+      const map = {};
+      for (const r of rows.slice(h + 1)) {
+        const refs = splitRefs(r[di]);
+        if (!refs.length) continue;
+        const dnpCell = xi >= 0 ? low(r[xi]) : "";
+        const dnp = /^(dnp|yes|true|1|不贴|no ?pop|n\/?p)$/.test(dnpCell) || (H[xi] === "populate" && /^(no|false|0)$/.test(dnpCell));
+        for (const d of refs) map[d] = { comment: ci >= 0 ? r[ci] || "" : "", lcsc: li >= 0 ? r[li] || "" : "", mpn: mi >= 0 ? r[mi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", dnp };
+      }
+      return Object.keys(map).length ? map : null;
+    }
+    return null;
+  }
+
+  // ---------- pick & place ----------
+  const UNIT = { mm: 1, mil: 0.0254, inch: 25.4, in: 25.4 };
+  function unitHint(s) {
+    s = low(s);
+    if (/\bmils?\b|\(mil\)|uunits\s*=\s*mils/.test(s)) return "mil";
+    if (/\binch(es)?\b|\(in\)|uunits\s*=\s*inch/.test(s)) return "inch";
+    if (/\bmm\b|millimet|\(mm\)|uunits\s*=\s*mm/.test(s)) return "mm";
+    return null;
+  }
+  const num = v => { const m = String(v ?? "").replace(",", ".").match(/-?\d+(\.\d+)?(e-?\d+)?/i); return m ? +m[0] : NaN; };
+  const sideOf = v => /^(b|bot|bottom|bottom ?layer|back|m|mirror(ed)?|yes|y|true|2|下|底|底层|反面|背面)$/.test(low(v)) ? "B" : "F";
+  const isRef = v => /^[A-Za-z][A-Za-z_]*\d+[A-Za-z0-9_\-.]*$/.test(String(v || "").trim()) && !/^(x|y|r)\d*$/i.test(v);
+  function tokens(line) { const out = []; const re = /"([^"]*)"|(\S+)/g; let m; while ((m = re.exec(line))) out.push(m[1] ?? m[2]); return out; }
+  // returns {rows:[{ref,x,y,rot,side,val,fp,unit}], unit, explicit} or null
+  function cpl(text, rowsIn) {
+    const lines = text.split(/\r?\n/);
+    let globalUnit = null;
+    for (const l of lines.slice(0, 30)) { const u = unitHint(l); if (u && /unit|单位|uunits|dimension|坐标/i.test(l)) { globalUnit = u; break; } }
+    const tryRows = rs => {
+      for (let h = 0; h < Math.min(30, rs.length); h++) {
+        const H = rs[h].map(low);
+        const di = findCol(H, [/^(designator|ref|refdes|ref ?des|reference|位号|component_name|comp_name|标号)$/]);
+        const xi = findCol(H, [/^(mid|center|centre|pos|cx|location|loc)[-_ ]?x/, /^x$/, /^x[-_ ]?(coord|coordinate|pos|position|\(mm\)|\(mil\))/, /^sym[_ ]?x$/, /^ref[-_ ]?x/, /^pad[-_ ]?x/, /^x[-_ ]?[(（]/]);
+        const yi = findCol(H, [/^(mid|center|centre|pos|cy|location|loc)[-_ ]?y/, /^y$/, /^y[-_ ]?(coord|coordinate|pos|position|\(mm\)|\(mil\))/, /^sym[_ ]?y$/, /^ref[-_ ]?y/, /^pad[-_ ]?y/, /^y[-_ ]?[(（]/]);
+        if (di < 0 || xi < 0 || yi < 0) continue;
+        const ri = findCol(H, [/^(rot|rotation|angle|sym_rotate|角度|旋转)/]);
+        const si = findCol(H, [/^(layer|side|tb|t\/b|mirror|sym_mirror|层|面|贴片面)/]);
+        const vi = findCol(H, [/^(comment|val|value|值|注释)$/]);
+        const fi = findCol(H, [/^(footprint|package|pattern|封装|sym_name|comp_package)$/]);
+        const colUnit = unitHint(H[xi]) || globalUnit;
+        const out = [];
+        for (const r of rs.slice(h + 1)) {
+          const ref = (r[di] || "").trim(); if (!ref || !Number.isFinite(num(r[xi])) || !Number.isFinite(num(r[yi]))) continue;
+          const cellU = unitHint(String(r[xi]).replace(/[-\d.]/g, " "));
+          out.push({ ref, x: num(r[xi]), y: num(r[yi]), rot: ri >= 0 ? num(r[ri]) || 0 : 0, side: si >= 0 ? sideOf(r[si]) : "F", val: vi >= 0 ? r[vi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", unit: cellU || colUnit });
+        }
+        if (out.length) return out;
+      }
+      return null;
+    };
+    let rows = rowsIn ? tryRows(rowsIn) : null;
+    if (!rows) rows = tryRows(Files.csv(text));
+    if (!rows) rows = tryRows(lines.map(tokens).filter(t => t.length));
+    if (!rows) { // header-less "REF X Y ROT [SIDE]" (Allegro place_txt and similar)
+      const out = [];
+      for (const l of lines) {
+        const t = tokens(l); if (t.length < 4 || !isRef(t[0])) continue;
+        const x = num(t[1]), y = num(t[2]), r = num(t[3]); if (![x, y, r].every(Number.isFinite)) continue;
+        const sideTok = t.slice(4).find(v => /^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v));
+        out.push({ ref: t[0], x, y, rot: r, side: sideTok ? sideOf(sideTok) : "F", val: "", fp: t.slice(4).find(v => !/^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v)) || "", unit: globalUnit });
+      }
+      rows = out.length >= 2 ? out : null;
+    }
+    if (!rows) return null;
+    const units = new Set(rows.map(r => r.unit).filter(Boolean));
+    const unit = units.size === 1 ? [...units][0] : globalUnit;
+    return { rows: rows.map(r => ({ ...r, x: r.x * UNIT[r.unit || unit || "mm"], y: r.y * UNIT[r.unit || unit || "mm"] })), unit: unit || "mm", explicit: !!unit };
+  }
+
+  // ---------- IPC-D-356(A) ----------
+  // returns pads in mm, Y up (CAD frame): {ref, pin, net, x, y, w, h, rot, side:'F'|'B'|'T', hole, plated}
+  function ipc356(text) {
+    let scale = 0.0001 * 25.4; const alias = {}; const pads = [];
+    for (const raw of text.split(/\r?\n/)) {
+      const l = raw.replace(/\s+$/, "");
+      if (/^P\s+UNITS\s+(CUST\s+1|SI)/i.test(l)) scale = 0.001;
+      else if (/^P\s+UNITS\s+CUST\s*[02]?/i.test(l)) scale = 0.0001 * 25.4;
+      else if (/^P\s+(NNAME\d+)\s+(.*)$/.test(l)) { const m = l.match(/^P\s+(NNAME\d+)\s+(.*)$/); alias[m[1]] = m[2].trim(); }
+      if (!/^(317|327|367)/.test(l)) continue;
+      const type = l.slice(0, 3);
+      let net = l.slice(3, 17).trim(); net = alias[net] || net; if (/^N\/C$/i.test(net)) net = "";
+      const ref = l.slice(20, 26).trim(), pin = l.slice(27, 31).trim();
+      const rest = l.slice(31);
+      const m = rest.match(/(?:D(\d+)([PU]))?A(\d\d)X([+-]?\d+)Y([+-]?\d+)(?:X(\d+)Y(\d+)R(\d+))?/);
+      if (!m || !ref || /^VIA$/i.test(ref)) { if (m && /^VIA$/i.test(ref)) pads.push({ via: 1, net, x: +m[4] * scale, y: +m[5] * scale, hole: m[1] ? +m[1] * scale : 0 }); continue; }
+      const acc = +m[3];
+      pads.push({ ref, pin, net, x: +m[4] * scale, y: +m[5] * scale, w: m[6] ? +m[6] * scale : 0, h: m[7] ? +m[7] * scale : 0, rot: m[8] ? +m[8] : 0,
+        side: type === "327" ? (acc > 1 ? "B" : "F") : "T", hole: m[1] ? +m[1] * scale : 0, plated: m[2] !== "U" && type !== "367" });
+    }
+    return pads.length ? pads : null;
+  }
+
+  // ---------- JLC / EasyEDA FlyingProbeTesting.json ----------
+  function flyprobe(text) {
+    let d; try { d = JSON.parse(text); } catch (e) { return null; }
+    if (!d || !d.pins || !d.pins.fields) return null;
+    const s = UNIT[low(d.lengthUnit) || "mil"] || 0.0254;
+    const F = d.pins.fields, ix = k => F.indexOf(k);
+    const pads = [];
+    for (const r of d.pins.rows) {
+      const name = String(r[ix("PIN_NAME")] ?? ""); const k = name.lastIndexOf("_");
+      const ref = k > 0 ? name.slice(0, k) : name, pin = k > 0 ? name.slice(k + 1) : "";
+      const lay = String(r[ix("LAYER")] ?? "T"), hole = +r[ix("HOLE_SIZE")] || 0;
+      pads.push({ ref, pin, net: r[ix("NET_NAME")] || "", x: +r[ix("PIN_X")] * s, y: +r[ix("PIN_Y")] * s, w: +r[ix("PAD_SIZEX")] * s, h: +r[ix("PAD_SIZEY")] * s,
+        rot: +r[ix("PAD_ANGLE")] || 0, shape: String(r[ix("PAD_SHAPE")] || "R"), side: hole > 0 ? "T" : (/^b/i.test(lay) ? "B" : "F"), hole: hole * s, plated: true });
+    }
+    const comps = [];
+    if (d.components && d.components.fields) {
+      const C = d.components.fields, cx = k => C.indexOf(k);
+      for (const r of d.components.rows) comps.push({ ref: r[cx("COMPONENT_NAME")], side: /^b/i.test(r[cx("LAYER")]) ? "B" : "F", x: +r[cx("X_COORDINATE")] * s, y: +r[cx("Y_COORDINATE")] * s, rot: +r[cx("ANGLE")] || 0 });
+    }
+    return { pads, comps };
+  }
+  return { bom, cpl, ipc356, flyprobe, splitRefs, unitHint, UNIT };
+})();
+
+// ===== import/kicad.js =====
+// KiCad 6–10 .kicad_pcb importer (S-expression). Validated pad-by-pad against pcbnew.
+globalThis.ImpKiCad = (() => {
   // ---------- S-expression reader ----------
   function sexpr(src) {
     let i = 0, cur = null, root = null; const n = src.length, stack = [];
@@ -476,45 +885,1452 @@ const KiPCB = (() => {
     return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: tr("F"), B: tr("B") }, vias, parts };
   }
 
-  // ---------- CSV / BOM ----------
-  function csv(text) {
-    const rows = []; let row = [], f = "", q = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
-      else if (c === '"') q = true;
-      else if (c === "," || c === "\t" || c === ";") { row.push(f); f = ""; }
-      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
-      else f += c;
-    }
-    if (f || row.length) { row.push(f); rows.push(row); }
-    return rows.filter(r => r.some(x => x.trim()));
-  }
-  function bom(text) {
-    const rows = csv(text.replace(/^﻿/, ""));
-    for (let h = 0; h < Math.min(6, rows.length); h++) {
-      const H = rows[h].map(x => x.trim().toLowerCase());
-      const di = H.findIndex(x => /^(designators?|references?|refs?|refdes|位号|标号)$/.test(x));
-      if (di < 0) continue;
-      let ci = H.findIndex(x => /^(comment|名称|注释)$/.test(x)); if (ci < 0) ci = H.findIndex(x => /^(value|值|description)$/.test(x));
-      const li = H.findIndex(x => /lcsc|jlcpcb part|^jlc|立创/.test(x));
-      const mi = H.findIndex(x => /^(mpn|manufacturer part|manufacturer_part_number|partnumber|part number|型号|料号)/.test(x));
-      const fi = H.findIndex(x => /^(footprint|封装|package)$/.test(x));
-      if (ci < 0 && li < 0 && mi < 0) return null;   // e.g. a CPL / position file
-      const map = {};
-      for (const r of rows.slice(h + 1)) {
-        for (const d of (r[di] || "").split(/[,\s;]+/).filter(Boolean)) map[d.trim()] = { comment: ci >= 0 ? (r[ci] || "").trim() : "", lcsc: li >= 0 ? (r[li] || "").trim() : "", mpn: mi >= 0 ? (r[mi] || "").trim() : "", fp: fi >= 0 ? (r[fi] || "").trim() : "" };
-      }
-      return Object.keys(map).length ? map : null;
-    }
-    return null;
-  }
-  return { parse, bom, csv };
+  return { parse, sexpr };
 })();
-/*PARSER-END*/
 
-/*ENRICH-START*/
-const Enrich = (() => {
+// ===== import/ipc2581.js =====
+// IPC-2581 (rev A/B/C) importer — exported by Cadence Allegro/OrCAD, Altium, PADS, Xpedition, Zuken, KiCad 8+.
+globalThis.ImpIPC2581 = (() => {
+  const { X } = Files, G = Geom;
+  const UNITS = { MILLIMETER: 1, MM: 1, MICRON: 0.001, INCH: 25.4, MIL: 0.0254, MILS: 0.0254 };
+  const num = v => (v === undefined || v === "" ? 0 : +v);
+
+  // Xform → function on Y-up points. Mirrored parts: flip X, then rotate the other way (matches Allegro and KiCad exports).
+  function xfFn(xf, loc, s) {
+    const rot = xf ? num(xf.a.rotation) : 0, mir = xf && xf.a.mirror === "true", sc = xf && xf.a.scale ? +xf.a.scale : 1;
+    const ox = (xf ? num(xf.a.xOffset) : 0) * s, oy = (xf ? num(xf.a.yOffset) : 0) * s;
+    const lx = (loc ? num(loc.a.x) : 0) * s, ly = (loc ? num(loc.a.y) : 0) * s;
+    return p => { let x = p[0] * sc, y = p[1] * sc; if (mir) x = -x; const r = G.rotM(x, y, mir ? -rot : rot); return [r[0] + ox + lx, r[1] + oy + ly]; };
+  }
+  function polyPts(poly, s, cwFix = false) {
+    const out = [];
+    for (const st of poly.c) {
+      if (st.n === "PolyBegin" || st.n === "PolyStepSegment") out.push([num(st.a.x) * s, num(st.a.y) * s]);
+      else if (st.n === "PolyStepCurve" && out.length) {
+        const b = [num(st.a.x) * s, num(st.a.y) * s], c = [num(st.a.centerX) * s, num(st.a.centerY) * s];
+        out.push(...G.arcPts(out[out.length - 1], b, c, st.a.clockwise === "true"));
+      }
+    }
+    return out;
+  }
+  function makeCtx(top) {
+    const ctx = { std: {}, user: {}, line: {}, s: 1 };
+    const ch = X.find(top, "CadHeader"); ctx.s = UNITS[(ch && ch.a.units || "MILLIMETER").toUpperCase()] || 1;
+    const content = X.kid(top, "Content");
+    const us = n => UNITS[(n.a.units || "").toUpperCase()] || ctx.s;
+    for (const d of X.kids(content, "DictionaryStandard")) { const s = us(d); for (const e of X.kids(d, "EntryStandard")) ctx.std[e.a.id] = { el: e.c[0], s }; }
+    for (const d of X.kids(content, "DictionaryUser")) { const s = us(d); for (const e of X.kids(d, "EntryUser")) ctx.user[e.a.id] = { el: e.c[0], s }; }
+    for (const d of X.kids(content, "DictionaryLineDesc")) { const s = us(d); for (const e of X.kids(d, "EntryLineDesc")) { const ld = X.kid(e, "LineDesc"); ctx.line[e.a.id] = ld ? num(ld.a.lineWidth) * s : 0.1; } }
+    return ctx;
+  }
+  // primitive element → list of polygons (local, Y up, mm)
+  function prim(el, s, ctx, depth = 0) {
+    if (!el || depth > 4) return [];
+    const a = k => num(el.a[k]) * s;
+    switch (el.n) {
+      case "StandardPrimitiveRef": { const e = ctx.std[el.a.id]; return e ? prim(e.el, e.s, ctx, depth + 1) : []; }
+      case "UserPrimitiveRef": { const e = ctx.user[el.a.id]; return e ? prim(e.el, e.s, ctx, depth + 1) : []; }
+      case "UserSpecial": { const out = []; for (const f of el.c) out.push(...prim(f, s, ctx, depth + 1)); return out; }
+      case "Circle": return [G.circ(0, 0, a("diameter") / 2)];
+      case "RectCenter": return [G.rect(a("width"), a("height"))];
+      case "RectRound": return [G.rrect(a("width"), a("height"), a("radius"))];
+      case "RectCham": { const w = a("width"), h = a("height"), c = a("chamfer"), x = w / 2, y = h / 2; return [[[-x + c, -y], [x - c, -y], [x, -y + c], [x, y - c], [x - c, y], [-x + c, y], [-x, y - c], [-x, -y + c]]]; }
+      case "RectCorner": { const x0 = a("lowerLeftX"), y0 = a("lowerLeftY"), x1 = a("upperRightX"), y1 = a("upperRightY"); return [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]]; }
+      case "Oval": return [G.rrect(a("width"), a("height"), Math.min(a("width"), a("height")) / 2, 6)];
+      case "Ellipse": return [G.circ(0, 0, 1).map(([x, y]) => [x * a("width") / 2, y * a("height") / 2])];
+      case "Diamond": { const w = a("width") / 2, h = a("height") / 2; return [[[0, h], [w, 0], [0, -h], [-w, 0]]]; }
+      case "Triangle": { const b = a("base") / 2, h = a("height") / 2; return [[[-b, -h], [b, -h], [0, h]]]; }
+      case "Hexagon": case "Octagon": return [G.rect(a("width") || a("length"), a("height") || a("length"))];
+      case "Donut": case "Thermal": case "Moire": return [G.circ(0, 0, (a("outerDiameter") || a("diameter")) / 2)];
+      case "Butterfly": return [G.circ(0, 0, a("diameter") / 2 || a("side") / 2)];
+      case "Contour": { const p = X.kid(el, "Polygon"); return p ? [polyPts(p, s)] : []; }
+      case "Polygon": return [polyPts(el, s)];
+      default: return [];
+    }
+  }
+  // stroke-like features → list of point runs (Y up)
+  function strokes(el, s, ctx) {
+    const w = () => { const r = X.kid(el, "LineDescRef"), d = X.kid(el, "LineDesc"); return r ? ctx.line[r.a.id] ?? 0.1 : d ? num(d.a.lineWidth) * s : 0.1; };
+    if (el.n === "UserSpecial" || el.n === "Features") return el.c.flatMap(c => strokes(c, s, ctx));
+    if (el.n === "UserPrimitiveRef") { const e = ctx.user[el.a.id]; return e && e.el ? strokes(e.el, e.s, ctx) : []; }
+    if (el.n === "Polyline") return [{ pts: polyPts(el, s), w: w() }];
+    if (el.n === "Line") return [{ pts: [[num(el.a.startX) * s, num(el.a.startY) * s], [num(el.a.endX) * s, num(el.a.endY) * s]], w: w() }];
+    if (el.n === "Arc") { const a0 = [num(el.a.startX) * s, num(el.a.startY) * s]; return [{ pts: [a0, ...G.arcPts(a0, [num(el.a.endX) * s, num(el.a.endY) * s], [num(el.a.centerX) * s, num(el.a.centerY) * s], el.a.clockwise === "true")], w: w() }]; }
+    return [];
+  }
+  const flip = p => [p[0], -p[1]];
+
+  function parse(text, fileName) {
+    const root = Files.xml(text), top = X.find(root, "IPC-2581");
+    if (!top) throw new Error("不是 IPC-2581 文件");
+    const ctx = makeCtx(top), s = ctx.s;
+    const cad = X.find(top, "CadData"); if (!cad) throw new Error("IPC-2581 文件里没有 CadData（可能只导出了 BOM）");
+    const layers = {};
+    for (const L of X.kids(cad, "Layer")) layers[L.a.name] = { fn: (L.a.layerFunction || "").toUpperCase(), side: (L.a.side || "").toUpperCase() };
+    const isCu = fn => /CONDUCTOR|SIGNAL|PLANE|MIXED|CONDFILM|CONDFOIL/.test(fn);
+    const cuNames = Object.keys(layers).filter(n => isCu(layers[n].fn));
+    const sideOfLayer = n => { const L = layers[n]; if (L && (L.side === "TOP" || L.side === "BOTTOM")) return L.side === "TOP" ? "F" : "B";
+      if (cuNames.length) { if (n === cuNames[0]) return "F"; if (n === cuNames[cuNames.length - 1]) return "B"; }
+      return /bot|b\.cu|bottom|back/i.test(n) ? "B" : /top|f\.cu|front/i.test(n) ? "F" : null; };
+    const step = X.kid(cad, "Step"); if (!step) throw new Error("IPC-2581 文件里没有 Step");
+    const b = G.newBoard(), edgePts = [];
+
+    // outline
+    const prof = X.kid(step, "Profile");
+    if (prof) for (const pg of [X.kid(prof, "Polygon"), ...X.kids(prof, "Cutout")].filter(Boolean)) { const pts = polyPts(pg, s).map(flip); b.edges += G.polyD(pts); edgePts.push(...pts); }
+
+    // logical nets (fallback for pad nets)
+    const lnet = {};
+    for (const ln of X.kids(step, "LogicalNet")) for (const pr of X.kids(ln, "PinRef")) lnet[pr.a.componentRef + "\u0001" + pr.a.pin] = ln.a.name;
+
+    // copper features: pads with PinRef, vias, tracks
+    const padsByRef = {}, tracks = { F: [], B: [] }, silk = { F: [], B: [] }, holes = [];
+    for (const lf of X.kids(step, "LayerFeature")) {
+      const L = layers[lf.a.layerRef] || { fn: "" };
+      if (L.fn === "DRILL") { for (const set of X.kids(lf, "Set")) for (const h of X.kids(set, "Hole")) holes.push({ x: num(h.a.x) * s, y: -num(h.a.y) * s, d: num(h.a.diameter) * s, plated: h.a.platingStatus !== "NONPLATED" }); continue; }
+      const side = sideOfLayer(lf.a.layerRef);
+      if (/SILKSCREEN|LEGEND/.test(L.fn) && side) {
+        for (const set of X.kids(lf, "Set")) for (const f of X.kids(set, "Features")) { const T = xfFn(X.kid(f, "Xform"), X.kid(f, "Location"), s); for (const g of f.c) for (const st of strokes(g, s, ctx)) silk[side].push(G.lineD(st.pts.map(T).map(flip))); }
+        continue;
+      }
+      if (!isCu(L.fn) || !side) continue;
+      if (cuNames.length > 1 && lf.a.layerRef !== cuNames[0] && lf.a.layerRef !== cuNames[cuNames.length - 1] && !(layers[lf.a.layerRef].side === "TOP" || layers[lf.a.layerRef].side === "BOTTOM")) continue;
+      for (const set of X.kids(lf, "Set")) {
+        const net = set.a.net || "";
+        const setPin = X.kid(set, "PinRef");
+        for (const pad of X.kids(set, "Pad")) {
+          const T = xfFn(X.kid(pad, "Xform"), X.kid(pad, "Location"), s);
+          const pe = pad.c.find(c => !/^(Xform|Location|PinRef|NonstandardAttribute)$/.test(c.n));
+          const polys = prim(pe, s, ctx).map(poly => poly.map(T).map(flip));
+          const pr = X.kid(pad, "PinRef") || setPin;
+          if (pr && pr.a.componentRef) {
+            const key = pr.a.componentRef, list = (padsByRef[key] ||= []);
+            if (!list.some(q => q.pin === pr.a.pin && q.side !== side)) list.push({ pin: pr.a.pin, net, polys, side });
+          } else if (polys.length) {
+            const bb = G.bboxOf(polys.flat());
+            if (G.validBB(bb)) b.vias.push([G.f3((bb[0] + bb[2]) / 2), G.f3((bb[1] + bb[3]) / 2), G.f3((bb[2] - bb[0]) / 2)]);
+          }
+        }
+        for (const f of X.kids(set, "Features")) {
+          const T = xfFn(X.kid(f, "Xform"), X.kid(f, "Location"), s);
+          for (const g of f.c) for (const st of strokes(g, s, ctx)) tracks[side].push([st.w, G.lineD(st.pts.map(T).map(flip))]);
+        }
+      }
+    }
+    // dedupe vias that appear on several layers
+    const vseen = new Set(); b.vias = b.vias.filter(v => { const k = v[0] + "," + v[1]; if (vseen.has(k)) return false; vseen.add(k); return true; });
+    b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.silk = { F: silk.F.join(""), B: silk.B.join("") };
+
+    // packages
+    const pkgs = {};
+    for (const pk of X.kids(step, "Package")) {
+      const lp = X.kid(pk, "LandPattern");
+      const pinOf = (pd, pinName) => { const T = xfFn(X.kid(pd, "Xform"), X.kid(pd, "Location"), s); const pe = pd.c.find(c => !/^(Xform|Location|PinRef|NonstandardAttribute)$/.test(c.n)); return { pin: pinName, polys: prim(pe, s, ctx).map(p => p.map(T)), th: /THRU/i.test(pd.a.type || "") }; };
+      // Allegro: <LandPattern><Pad>…<PinRef pin/></Pad>;  KiCad: <Pin number type>
+      const pins = lp ? X.kids(lp, "Pad").map(pd => { const pr = X.kid(pd, "PinRef"); return pinOf(pd, pr ? pr.a.pin : ""); })
+        : X.kids(pk, "Pin").map(pd => pinOf(pd, pd.a.number || ""));
+      const outl = [];
+      for (const host of [X.kid(pk, "AssemblyDrawing"), pk].filter(Boolean)) { const o = X.kid(host, "Outline"); if (o) { const pg = X.kid(o, "Polygon"); if (pg) { outl.push(polyPts(pg, s)); break; } } }
+      const sk = [];
+      const ss = X.kid(pk, "SilkScreen");
+      if (ss) for (const mk of [...X.kids(ss, "Marking"), ...X.kids(ss, "Outline")]) { const T = xfFn(X.kid(mk, "Xform"), X.kid(mk, "Location"), s); for (const g of mk.c) { for (const st of strokes(g, s, ctx)) sk.push(st.pts.map(T)); if (g.n === "Polygon") sk.push(polyPts(g, s).map(T)); } }
+      pkgs[pk.a.name] = { pins, outl, sk };
+    }
+
+    // BOM inside the file
+    const bomInfo = {};
+    for (const bom of X.findAll(top, "Bom")) for (const it of X.kids(bom, "BomItem")) {
+      const ch = {}; for (const t of X.findAll(it, "Textual")) ch[t.a.textualCharacteristicName || t.a.definitionName || ""] = t.a.textualCharacteristicValue ?? t.a.value ?? "";
+      for (const rd of X.kids(it, "RefDes")) bomInfo[rd.a.name] = { ch, populate: rd.a.populate !== "false", oem: it.a.OEMDesignNumberRef || "" };
+    }
+
+    const added = []; let xfErr = 0;
+    for (const c of X.kids(step, "Component")) {
+      const ref = c.a.refDes; if (!ref) continue;
+      const side = sideOfLayer(c.a.layerRef) || "F";
+      const T = xfFn(X.kid(c, "Xform"), X.kid(c, "Location"), s);
+      const loc = X.kid(c, "Location"), cx = loc ? num(loc.a.x) * s : 0, cy = loc ? -num(loc.a.y) * s : 0;
+      const pk = pkgs[c.a.packageRef] || { pins: [], outl: [], sk: [] };
+      const fromPkg = pk.pins.map(p => ({ pin: p.pin, net: lnet[ref + "\u0001" + p.pin] || "", polys: p.polys.map(poly => poly.map(T).map(flip)), side }));
+      let raw = padsByRef[ref];
+      if (!raw || !raw.length) raw = fromPkg;
+      else { // exporters may leave mechanical / unnumbered pads without a PinRef: take them from the package
+        const ctr = q => { const bb = G.bboxOf(q.polys.flat()); return [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]; };
+        const have = raw.map(ctr), boxes = raw.map(q => G.bboxOf(q.polys.flat()));
+        const inside = c => boxes.some(bb => c[0] > bb[0] && c[0] < bb[2] && c[1] > bb[1] && c[1] < bb[3]); // e.g. paste windows on an exposed pad
+        for (const q of fromPkg) {
+          if (!q.polys.length) continue; const c0 = ctr(q);
+          const same = raw.find(r => r.pin === q.pin && q.pin);
+          if (same) { const c1 = ctr(same); xfErr = Math.max(xfErr, Math.hypot(c1[0] - c0[0], c1[1] - c0[1])); continue; }
+          if (!have.some(h => Math.hypot(h[0] - c0[0], h[1] - c0[1]) < 0.05) && !inside(c0)) { raw = raw.concat([q]); added.push([c0, ref + "." + q.pin]); }
+        }
+      }
+      const mount = (c.a.mountType || "").toUpperCase();
+      const tht = /TH/.test(mount) && mount !== "SMT";
+      const pads = raw.map(q => {
+        let kind = 0; const bb = G.bboxOf(q.polys.flat()), mx = (bb[0] + bb[2]) / 2, my = (bb[1] + bb[3]) / 2;
+        let holeD = "";
+        const h = holes.find(h => Math.abs(h.x - mx) < 0.02 && Math.abs(h.y - my) < 0.02);
+        if (h) { kind = h.plated ? 1 : 2; holeD = G.polyD(G.circ(h.x, h.y, h.d / 2, 20).reverse()); }
+        else if (tht) kind = 1;
+        return G.padRec(q.pin, q.net || lnet[ref + "\u0001" + q.pin] || "", q.polys, kind, holeD);
+      });
+      const body = pk.outl.map(o => G.polyD(o.map(T).map(flip))).join("");
+      const sk = pk.sk.map(o => G.lineD(o.map(T).map(flip))).join("");
+      const bpts = pk.outl.flatMap(o => o.map(T).map(flip));
+      let bb = G.bboxOf(pads.flatMap(p => [[p[7][0], p[7][1]], [p[7][2], p[7][3]]]).concat(bpts));
+      if (!G.validBB(bb)) bb = [cx - .5, cy - .5, cx + .5, cy + .5];
+      const props = {};
+      for (const na of X.kids(c, "NonstandardAttribute")) props[na.a.name] = na.a.value;
+      const bi = bomInfo[ref];
+      if (bi) for (const [k, v] of Object.entries(bi.ch)) if (v && !(k in props)) props[k] = v;
+      const val = props.VALUE || props.Value || props.COMP_VALUE || props.value || "";
+      const mpn = Object.entries(props).find(([k]) => /part.?number|^mpn$|manufacturer.?part|^pn$/i.test(k));
+      if (mpn) props.MPN = mpn[1];
+      const lcsc = Object.entries(props).find(([k]) => /lcsc|jlc/i.test(k)); if (lcsc) props.LCSC = lcsc[1];
+      if (!props.MPN && c.a.part && !/[_]{1}.*[_]/.test(c.a.part)) props.MPN = c.a.part;
+      const p1 = pads.find(p => p[0] === "1");
+      b.parts.push({ r: ref, s: side, c: [G.f3(cx), G.f3(cy)], rot: num((X.kid(c, "Xform") || { a: {} }).a.rotation), bb: bb.map(G.f3), pads, body, silk: sk,
+        val, fp: c.a.packageRef || "", props, sheet: "", p1: p1 ? [p1[4], p1[5]] : null, tht: tht ? 1 : 0, dnp: bi && !bi.populate ? 1 : 0, nobom: 0 });
+    }
+    if (added.length) b.vias = b.vias.filter(v => !added.some(([c]) => Math.hypot(c[0] - v[0], c[1] - v[1]) < 0.05));
+    b._added = added.map(a => a[1]); b._xfErr = xfErr;
+    return G.finishBoard(b, edgePts);
+  }
+  const detect = head => /<IPC-2581[\s>]/.test(head);
+  return { parse, detect };
+})();
+
+// ===== import/easyeda.js =====
+// 嘉立创EDA专业版 / EasyEDA Pro importer: .epro (zip), .epru (project backup), .epcb + .efoo.
+// Each document is a list of lines `{"type":..,"id":..}||{body}|`, starting with a DOCHEAD line.
+globalThis.ImpEasyEDA = (() => {
+  const G = Geom, MIL = 0.0254;
+  const isDoc = head => /^\s*\{"type":"DOCHEAD"\}\|\|/.test(head);
+
+  function docs(text) {
+    const out = []; let cur = null;
+    for (const line of text.split(/\r?\n/)) {
+      const k = line.indexOf("||"); if (k < 0) continue;
+      let h, b;
+      try { h = JSON.parse(line.slice(0, k)); } catch (e) { continue; }
+      const raw = line.slice(k + 2).replace(/\|\s*$/, "");
+      try { b = raw ? JSON.parse(raw) : {}; } catch (e) { b = raw; }
+      if (h.type === "DOCHEAD") { cur = { head: b || {}, recs: [] }; out.push(cur); continue; }
+      if (!cur) { cur = { head: { docType: "PCB" }, recs: [] }; out.push(cur); }
+      cur.recs.push({ type: h.type, id: h.id, b });
+    }
+    return out;
+  }
+
+  // EasyEDA path → list of point runs (Y up, mil). Supports L, ARC/CARC, R, CIRCLE, nested arrays.
+  function pathRuns(path) {
+    if (!Array.isArray(path) || !path.length) return [];
+    if (Array.isArray(path[0])) return path.flatMap(pathRuns);
+    if (path[0] === "R") { const [, x, y, w, h] = path.map(Number); return [[[x, y], [x + w, y], [x + w, y - h], [x, y - h], [x, y]]]; }
+    if (path[0] === "CIRCLE") { const [, cx, cy, r] = path.map(Number); const c = G.circ(cx, cy, r, 28); return [c.concat([c[0]])]; }
+    const runs = []; let run = [], i = 0, cmd = "L";
+    const num = v => typeof v === "number" || (typeof v === "string" && v !== "" && !isNaN(+v));
+    while (i < path.length) {
+      const t = path[i];
+      if (!num(t)) { cmd = String(t).toUpperCase(); i++; continue; }
+      if (!run.length) { run.push([+path[i], +path[i + 1]]); i += 2; continue; }
+      if (cmd === "ARC" || cmd === "CARC") {
+        const ang = +path[i], x = +path[i + 1], y = +path[i + 2]; i += 3;
+        run.push(...arcByAngle(run[run.length - 1], [x, y], ang));
+      } else if (cmd === "C") { // cubic bezier: c1x c1y c2x c2y x y
+        const p0 = run[run.length - 1], c1 = [+path[i], +path[i + 1]], c2 = [+path[i + 2], +path[i + 3]], p3 = [+path[i + 4], +path[i + 5]]; i += 6;
+        for (let k = 1; k <= 8; k++) { const t2 = k / 8, u = 1 - t2; run.push([u * u * u * p0[0] + 3 * u * u * t2 * c1[0] + 3 * u * t2 * t2 * c2[0] + t2 * t2 * t2 * p3[0], u * u * u * p0[1] + 3 * u * u * t2 * c1[1] + 3 * u * t2 * t2 * c2[1] + t2 * t2 * t2 * p3[1]]); }
+      } else { run.push([+path[i], +path[i + 1]]); i += 2; }
+    }
+    if (run.length) runs.push(run);
+    return runs;
+  }
+  // arc from a to b sweeping `ang` degrees (positive = counter-clockwise, Y up)
+  function arcByAngle(a, b, ang) {
+    if (!ang || Math.abs(ang) < 1e-6) return [b];
+    const th = Math.abs(ang) * Math.PI / 180, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy); if (d < 1e-9) return [b];
+    const r = d / 2 / Math.sin(th / 2), h = r * Math.cos(th / 2);
+    const nx = -dy / d, ny = dx / d, sgn = ang > 0 ? 1 : -1;
+    const c = [mx + nx * h * sgn, my + ny * h * sgn];
+    return G.arcPts(a, b, c, ang < 0, 8);
+  }
+  function padPolys(dp, pad) {
+    if (!dp) return [];
+    const w = (+dp.width || 0) * MIL, h = (+dp.height || +dp.width || 0) * MIL;
+    switch (String(dp.padType || "").toUpperCase()) {
+      case "ELLIPSE": case "CIRCLE": return [Math.abs(w - h) < 1e-6 ? G.circ(0, 0, w / 2) : G.circ(0, 0, 1).map(([x, y]) => [x * w / 2, y * h / 2])];
+      case "OVAL": return [G.rrect(w, h, Math.min(w, h) / 2, 6)];
+      case "POLYGON": case "POLYLINE": return pathRuns(dp.path).map(r => r.map(([x, y]) => [x * MIL, y * MIL]));
+      case "RECT": default: { const r = +dp.radius || 0; return [G.rrect(w, h, r <= 0 ? 0 : r <= 1 ? r * Math.min(w, h) / 2 : r * MIL)]; } // radius: ratio (≤1) or mil
+    }
+  }
+
+  function build(pcb, pool) {
+    const b = G.newBoard(), edgePts = [];
+    const recs = pcb.recs, canvas = recs.find(r => r.type === "CANVAS");
+    const flip = ([x, y]) => [x * MIL, -y * MIL];
+    const attrs = {}; const padNet = {};
+    for (const r of recs) {
+      if (r.type === "ATTR" && r.b && r.b.parentId) (attrs[r.b.parentId] ||= {})[r.b.key] = r.b.value;
+      if (r.type === "PAD_NET") { let id; try { id = JSON.parse(r.id); } catch (e) { continue; } const [, comp, num, padId] = id; const net = (r.b && r.b.padNet) || ""; padNet[comp + "|id|" + padId] = net; padNet[comp + "|n|" + num] = net; }
+    }
+    // board outline and silk
+    const tracks = { F: [], B: [] }, silk = { F: [], B: [] };
+    for (const r of recs) {
+      const o = r.b; if (!o || typeof o !== "object") continue;
+      const L = o.layerId;
+      if ((r.type === "POLY" || r.type === "FILL") && L === 11) for (const run of pathRuns(o.path)) { const pts = run.map(flip); b.edges += G.lineD(pts); edgePts.push(...pts); }
+      else if ((r.type === "POLY" || r.type === "LINE") && (L === 3 || L === 4)) {
+        const runs = r.type === "LINE" ? [[[o.startX, o.startY], [o.endX, o.endY]]] : pathRuns(o.path);
+        for (const run of runs) silk[L === 3 ? "F" : "B"].push(G.lineD(run.map(flip)));
+      } else if (r.type === "LINE" && (L === 1 || L === 2)) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([flip([o.startX, o.startY]), flip([o.endX, o.endY])])]);
+      else if (r.type === "ARC" && (L === 1 || L === 2) && o.startX !== undefined) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([[o.startX, o.startY], ...arcByAngle([o.startX, o.startY], [o.endX, o.endY], o.arcAngle ?? o.angle ?? 0)].map(flip))]);
+      else if (r.type === "VIA") b.vias.push([G.f3(o.centerX * MIL), G.f3(-o.centerY * MIL), G.f3((o.viaDiameter || 20) * MIL / 2)]);
+    }
+    b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.silk = { F: silk.F.join(""), B: silk.B.join("") };
+
+    const fpCache = {};
+    const footprintOf = uuid => {
+      if (!uuid) return null;
+      if (uuid in fpCache) return fpCache[uuid];
+      const d = pool.foot[uuid]; if (!d) return fpCache[uuid] = null;
+      const pads = [], body = [], sk = [], bound = [];
+      let name = "";
+      for (const r of d.recs) {
+        const o = r.b; if (!o || typeof o !== "object") continue;
+        if (r.type === "ATTR" && o.key === "Name") name = o.value;
+        if (r.type === "PAD") pads.push(o);
+        else if ((r.type === "POLY" || r.type === "FILL") && o.layerId === 3) sk.push(...pathRuns(o.path));
+        else if ((r.type === "POLY" || r.type === "FILL") && (o.layerId === 9 || o.layerId === 13)) body.push(...pathRuns(o.path));
+        else if ((r.type === "POLY" || r.type === "FILL") && o.layerId === 71) bound.push(...pathRuns(o.path));
+        else if (r.type === "LINE" && o.layerId === 3) sk.push([[o.startX, o.startY], [o.endX, o.endY]]);
+      }
+      return fpCache[uuid] = { name: name || (d.head.title || ""), pads, body: body.length ? body : bound, sk };
+    };
+    const devOf = uuid => pool.dev[uuid] || null;
+
+    for (const r of recs) {
+      if (r.type !== "COMPONENT" || !r.b) continue;
+      const o = r.b, A = attrs[r.id] || {};
+      const dev = devOf(A.Device), da = (dev && dev.attrs) || {};
+      const ref = A.Designator || da.Designator || ""; if (!ref || /\?$/.test(ref)) continue;
+      const fp = footprintOf(A.Footprint || da.Footprint);
+      const bottom = o.layerId === 2, ang = +o.angle || 0;
+      // footprint (Y up, mil) → board (Y up, mil): bottom-side parts are mirrored across the X axis, then rotated
+      // (checked against EasyEDA's own flying-probe export and against Allegro for the same board)
+      const T = ([x, y]) => { if (bottom) y = -y; const q = G.rotM(x, y, ang); return flip([q[0] + o.x, q[1] + o.y]); };
+      const pads = [];
+      if (fp) for (const pd of fp.pads) {
+        const local = padPolys(pd.defaultPad, pd).map(poly => poly.map(([x, y]) => { const q = G.rotM(x, y, +pd.padAngle || 0); return [q[0] / MIL + pd.centerX, q[1] / MIL + pd.centerY]; }));
+        const polys = local.map(poly => poly.map(T));
+        const hole = pd.hole && (+pd.hole.width > 0) ? pd.hole : null;
+        const kind = hole ? (pd.plated === false ? 2 : 1) : 0;
+        let holeD = "";
+        if (hole) { const c = T([pd.centerX, pd.centerY]), hw = hole.width * MIL, hh = (hole.height || hole.width) * MIL; holeD = G.polyD((Math.abs(hw - hh) < 1e-6 ? G.circ(c[0], c[1], hw / 2, 20) : G.rrect(hw, hh, Math.min(hw, hh) / 2, 6).map(([x, y]) => [x + c[0], y + c[1]])).reverse()); }
+        const net = padNet[r.id + "|id|" + pd.__id] ?? padNet[r.id + "|n|" + (pd.num ?? "")] ?? "";
+        pads.push(G.padRec(pd.num ?? "", net, polys, kind, holeD));
+      }
+      const c = T([0, 0]);
+      const body = fp ? fp.body.map(run => G.lineD(run.map(T))).join("") : "";
+      const sk = fp ? fp.sk.map(run => G.lineD(run.map(T))).join("") : "";
+      const bpts = fp ? fp.body.flatMap(run => run.map(T)) : [];
+      let bb = G.bboxOf(pads.flatMap(p => [[p[7][0], p[7][1]], [p[7][2], p[7][3]]]).concat(bpts));
+      if (!G.validBB(bb)) bb = [c[0] - .5, c[1] - .5, c[0] + .5, c[1] + .5];
+      const props = { ...da, ...(o.attrs || {}), ...A };
+      const resolve = v => String(v ?? "").replace(/^=/, "").replace(/\{([^}]+)\}/g, (m, k) => props[k] ?? "").trim();
+      delete props.Device; delete props.Footprint; delete props.Symbol;
+      const lcsc = props["Supplier Part"] || props["LCSC Part"] || props["LCSC"] || props["Supplier Part Number"] || "";
+      if (lcsc) props.LCSC = lcsc;
+      if (props["Manufacturer Part"]) props.MPN = props["Manufacturer Part"];
+      const p1 = pads.find(p => p[0] === "1");
+      const tht = pads.length && pads.every(p => p[3] !== 0) ? 1 : 0;
+      b.parts.push({ r: ref, s: bottom ? "B" : "F", c: c.map(G.f3), rot: ang, bb: bb.map(G.f3), pads, body, silk: sk,
+        val: resolve(A.Value || (o.attrs && o.attrs.Value) || da.Value || props.Name || ""), fp: (fp && fp.name) || (dev && dev.title) || "", props, sheet: "", p1: p1 ? [p1[4], p1[5]] : null,
+        tht, dnp: /^(yes|true|1)$/i.test(String(A["Do Not Place"] ?? A.DNP ?? "")) ? 1 : 0, nobom: /^(no|false|0)$/i.test(String(A["Add into BOM"] ?? "yes")) ? 1 : 0 });
+    }
+    // free pads placed directly on the board (test points, mounting holes)
+    for (const r of recs) {
+      if (r.type !== "PAD" || !r.b || !r.b.num) continue;
+      const pd = r.b, polys = padPolys(pd.defaultPad, pd).map(poly => poly.map(([x, y]) => { const q = G.rotM(x, y, +pd.padAngle || 0); return flip([q[0] / MIL + pd.centerX, q[1] / MIL + pd.centerY]); }));
+      const kind = pd.hole && +pd.hole.width > 0 ? (pd.plated === false ? 2 : 1) : 0;
+      const rec = G.padRec("1", pd.netName || "", polys, kind);
+      const bb = rec[7];
+      b.parts.push({ r: pd.num, s: pd.layerId === 2 ? "B" : "F", c: [rec[4], rec[5]], rot: 0, bb: bb.map(G.f3), pads: [rec], body: "", silk: "", val: pd.padType || "", fp: "PAD",
+        props: {}, sheet: "", p1: null, tht: kind ? 1 : 0, dnp: 0, nobom: 1 });
+    }
+    return G.finishBoard(b, edgePts);
+  }
+
+  // gather every document from all EasyEDA files of a project and build one board per PCB document
+  function parseProject(texts) {
+    const pool = { foot: {}, dev: {}, pcbs: [] };
+    for (const t of texts) for (const d of docs(t)) {
+      const type = String(d.head.docType || "").toUpperCase(), uuid = d.head.uuid;
+      if (type === "FOOTPRINT") {
+        // keep record ids on pads so PAD_NET can match by pad id
+        for (const r of d.recs) if (r.type === "PAD" && r.b && typeof r.b === "object") r.b.__id = r.id;
+        if (uuid) pool.foot[uuid] = d;
+      } else if (type === "DEVICE") {
+        const meta = d.recs.find(r => r.type === "META");
+        if (uuid) pool.dev[uuid] = { attrs: (meta && meta.b && meta.b.attributes) || {}, title: meta && meta.b && meta.b.title };
+      } else if (type === "PCB") pool.pcbs.push(d);
+    }
+    return pool.pcbs.map(p => ({ board: build(p, pool), title: p.head.title || "", uuid: p.head.uuid, missingFootprints: !Object.keys(pool.foot).length }));
+  }
+  return { parseProject, docs, isDoc, pathRuns };
+})();
+
+// ===== import/gerber.js =====
+// Gerber RS-274X (incl. aperture macros, arcs, regions, X2 attributes) and Excellon drill readers.
+// Output in mm, CAD frame (Y up). Callers flip Y for display.
+globalThis.ImpGerber = (() => {
+  const G = Geom;
+
+  // ---------- aperture macro expressions ----------
+  function evalExpr(expr, vars) {
+    const s = expr.replace(/\s+/g, "").replace(/\$(\d+)/g, (m, k) => `(${vars[+k] ?? 0})`).replace(/x/gi, "*");
+    if (!/^[-+*/().\d eE]*$/.test(s)) return 0;
+    try { return Function(`"use strict";return (${s || 0});`)(); } catch (e) { return 0; }
+  }
+  // macro body → function(params) → polygons (local, Y up)
+  function compileMacro(body) {
+    const stmts = body.split("*").map(x => x.trim()).filter(Boolean);
+    return params => {
+      const vars = {}; params.forEach((v, i) => vars[i + 1] = v);
+      const polys = [];
+      for (const st of stmts) {
+        if (/^0/.test(st) && !/^0\./.test(st)) continue; // comment
+        const asg = st.match(/^\$(\d+)\s*=\s*(.+)$/);
+        if (asg) { vars[+asg[1]] = evalExpr(asg[2], vars); continue; }
+        const a = st.split(",").map(t => evalExpr(t, vars));
+        const code = a[0], on = a[1] !== 0;
+        let poly = null, rot = 0;
+        if (code === 1) { poly = G.circ(a[3] || 0, a[4] || 0, a[2] / 2, 20); rot = a[5] || 0; }
+        else if (code === 20 || code === 2) { const w = a[2], x1 = a[3], y1 = a[4], x2 = a[5], y2 = a[6]; rot = a[7] || 0; const L = Math.hypot(x2 - x1, y2 - y1) || 1e-9, nx = -(y2 - y1) / L * w / 2, ny = (x2 - x1) / L * w / 2; poly = [[x1 + nx, y1 + ny], [x2 + nx, y2 + ny], [x2 - nx, y2 - ny], [x1 - nx, y1 - ny]]; }
+        else if (code === 21) { const w = a[2], h = a[3], cx = a[4], cy = a[5]; rot = a[6] || 0; poly = G.rect(w, h).map(([x, y]) => [x + cx, y + cy]); }
+        else if (code === 22) { const w = a[2], h = a[3], x = a[4], y = a[5]; rot = a[6] || 0; poly = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]; }
+        else if (code === 4) { const n = a[2]; poly = []; for (let k = 0; k <= n; k++) poly.push([a[3 + 2 * k], a[4 + 2 * k]]); rot = a[5 + 2 * n] || 0; }
+        else if (code === 5) { const n = a[2], cx = a[3], cy = a[4], d = a[5]; rot = a[6] || 0; poly = Array.from({ length: n }, (_, k) => [cx + d / 2 * Math.cos(2 * Math.PI * k / n), cy + d / 2 * Math.sin(2 * Math.PI * k / n)]); }
+        else if (code === 6) { poly = G.circ(a[1], a[2], a[3] / 2, 20); rot = a[9] || 0; }
+        else if (code === 7) { poly = G.circ(a[1], a[2], a[3] / 2, 20); rot = a[6] || 0; }
+        if (!poly) continue;
+        if (code === 6 || code === 7) { polys.push(rot ? poly.map(p => G.rotM(p[0], p[1], rot)) : poly); continue; }
+        if (!on) continue; // exposure off: knock-out, ignored for display
+        polys.push(rot ? poly.map(p => G.rotM(p[0], p[1], rot)) : poly);
+      }
+      return polys;
+    };
+  }
+  function apertureShape(ap, macros) {
+    if (ap.sh) return ap.sh;
+    const p = ap.params, u = ap.unit || 1;
+    let sh;
+    switch (ap.tpl) {
+      case "C": sh = { polys: [G.circ(0, 0, p[0] * u / 2, 20)], d: p[0] * u, round: true }; break;
+      case "R": sh = { polys: [G.rect(p[0] * u, (p[1] ?? p[0]) * u)], d: Math.min(p[0], p[1] ?? p[0]) * u }; break;
+      case "O": { const w = p[0] * u, h = (p[1] ?? p[0]) * u; sh = { polys: [G.rrect(w, h, Math.min(w, h) / 2, 6)], d: Math.min(w, h) }; break; }
+      case "P": { const n = Math.max(3, Math.round(p[1] || 3)), r = p[0] * u / 2, rot = (p[2] || 0) * Math.PI / 180; sh = { polys: [Array.from({ length: n }, (_, k) => [r * Math.cos(rot + 2 * Math.PI * k / n), r * Math.sin(rot + 2 * Math.PI * k / n)])], d: p[0] * u }; break; }
+      default: { const m = macros[ap.tpl]; const polys = (m ? m(p) : []).map(poly => poly.map(([x, y]) => [x * u, y * u])); const bb = G.bboxOf(polys.flat()); sh = { polys, d: G.validBB(bb) ? Math.min(bb[2] - bb[0], bb[3] - bb[1]) : 0.1 }; }
+    }
+    return ap.sh = sh;
+  }
+
+  // ---------- Gerber ----------
+  function parse(text) {
+    let unit = 1, fmt = { xi: 2, xd: 4, yi: 2, yd: 4, lz: true };
+    const aps = {}, macros = {}, attrsF = {};
+    let cur = null, x = 0, y = 0, interp = 1, quadrant = 75, region = false, polarityDark = true;
+    const obj = {}; // current object attributes (X2 TO.)
+    const flashes = [], draws = [], regions = [];
+    let contour = null;
+    const conv = (s, axis) => {
+      if (s === undefined) return undefined;
+      if (s.includes(".")) return +s * unit;
+      const neg = s[0] === "-"; let d = s.replace(/^[+-]/, "");
+      const I = axis === "x" ? fmt.xi : fmt.yi, D = axis === "x" ? fmt.xd : fmt.yd;
+      if (!fmt.lz) d = d.padEnd(I + D, "0"); // trailing zeros omitted
+      const v = parseInt(d, 10) / Math.pow(10, D);
+      return (neg ? -v : v) * unit;
+    };
+    const closeContour = () => { if (contour && contour.length > 2) regions.push({ pts: contour, dark: polarityDark }); contour = null; };
+    // tokenise: extended blocks %...% and plain word commands ending with *
+    const re = /%([^%]*)%|([^%*]+)\*/g; let m;
+    while ((m = re.exec(text))) {
+      if (m[1] !== undefined) {
+        for (const blk of m[1].split("*").map(t => t.trim()).filter(Boolean).reduce((acc, t) => { // macros keep their body together
+          if (acc.am) { acc.am.body.push(t); return acc; }
+          if (/^AM/.test(t)) { acc.am = { name: t.slice(2), body: [] }; acc.list.push(acc.am); return acc; }
+          acc.list.push(t); return acc;
+        }, { list: [], am: null }).list) {
+          if (typeof blk === "object") { macros[blk.name] = compileMacro(blk.body.join("*")); continue; }
+          if (/^FS/.test(blk)) { const f = blk.match(/FS([LT])?([AI])?.*?X(\d)(\d)Y(\d)(\d)/); if (f) fmt = { lz: f[1] !== "T", xi: +f[3], xd: +f[4], yi: +f[5], yd: +f[6] }; }
+          else if (/^MO/.test(blk)) unit = /MOIN/.test(blk) ? 25.4 : 1;
+          else if (/^AD/.test(blk)) {
+            const a = blk.match(/^ADD(\d+)([^,]+)(?:,(.*))?$/); if (!a) continue;
+            aps[+a[1]] = { tpl: a[2], params: a[3] ? a[3].split("X").map(Number) : [], unit };
+          }
+          else if (/^LP/.test(blk)) polarityDark = blk[2] !== "C";
+          else if (/^TF/.test(blk)) { const [k, ...v] = blk.slice(2).split(","); attrsF[k] = v; }
+          else if (/^TO/.test(blk)) { const [k, ...v] = blk.slice(2).split(","); obj[k] = v; }
+          else if (/^TD/.test(blk)) { const k = blk.slice(2); if (k) delete obj[k]; else for (const q in obj) delete obj[q]; }
+        }
+        continue;
+      }
+      let w = m[2].trim(); if (!w) continue;
+      if (/^G0?4/.test(w)) continue;
+      if (/^M0?2/.test(w)) break;
+      const g = w.match(/G0?(\d+)/g);
+      if (g) for (const gg of g) {
+        const n = +gg.slice(1);
+        if (n === 1 || n === 2 || n === 3) interp = n;
+        else if (n === 74 || n === 75) quadrant = n;
+        else if (n === 36) { region = true; contour = null; }
+        else if (n === 37) { closeContour(); region = false; }
+        else if (n === 70) unit = 25.4; else if (n === 71) unit = 1;
+      }
+      const dsel = w.match(/D(\d+)$/);
+      const coords = w.match(/X([+-]?[\d.]+)|Y([+-]?[\d.]+)|I([+-]?[\d.]+)|J([+-]?[\d.]+)/g);
+      if (dsel && +dsel[1] >= 10 && !coords) { cur = +dsel[1]; continue; }
+      if (dsel && +dsel[1] >= 10) cur = +dsel[1];
+      const get = k => { const r = w.match(new RegExp(k + "([+-]?[\\d.]+)")); return r ? r[1] : undefined; };
+      const nx = get("X") !== undefined ? conv(get("X"), "x") : x, ny = get("Y") !== undefined ? conv(get("Y"), "y") : y;
+      const iv = get("I") !== undefined ? conv(get("I"), "x") : 0, jv = get("J") !== undefined ? conv(get("J"), "y") : 0;
+      let op = w.match(/D0?([123])(?!\d)/); op = op ? +op[1] : (coords ? 1 : 0);
+      if (!coords && !op) continue;
+      if (op === 2) { if (region) { closeContour(); contour = [[nx, ny]]; } x = nx; y = ny; continue; }
+      if (op === 3) {
+        const ap = aps[cur]; if (ap) { const sh = apertureShape(ap, macros); flashes.push({ x: nx, y: ny, ap: cur, sh, dark: polarityDark, attrs: { ...obj } }); }
+        x = nx; y = ny; continue;
+      }
+      // op 1: draw / region edge
+      let seg;
+      if (interp === 1) seg = [[nx, ny]];
+      else {
+        let c;
+        if (quadrant === 75) c = [x + iv, y + jv];
+        else { // single quadrant: pick the centre that gives equal radii
+          let best = null, bd = 1e9;
+          for (const sx of [1, -1]) for (const sy of [1, -1]) { const cc = [x + sx * Math.abs(iv), y + sy * Math.abs(jv)]; const d = Math.abs(Math.hypot(x - cc[0], y - cc[1]) - Math.hypot(nx - cc[0], ny - cc[1])); if (d < bd) { bd = d; best = cc; } }
+          c = best;
+        }
+        seg = G.arcPts([x, y], [nx, ny], c, interp === 2, 8);
+        if (quadrant === 74 && seg.length > 30) seg = [[nx, ny]];
+      }
+      if (region) { if (!contour) contour = [[x, y]]; contour.push(...seg); }
+      else { const ap = aps[cur]; draws.push({ pts: [[x, y], ...seg], w: ap ? apertureShape(ap, macros).d : 0.1, dark: polarityDark, attrs: { ...obj } }); }
+      x = nx; y = ny;
+    }
+    closeContour();
+    return { flashes, draws, regions, attrs: attrsF };
+  }
+
+  // ---------- Excellon ----------
+  function drill(text) {
+    let unit = 25.4, lz = true, intD = 2, decD = 4, fmtSet = false;
+    const tools = {}, holes = []; let tool = null, x = 0, y = 0, inHeader = false, plated = null;
+    const ff = text.match(/FILE_FORMAT\s*=\s*(\d+)\s*:\s*(\d+)/i); if (ff) { intD = +ff[1]; decD = +ff[2]; fmtSet = true; }
+    const ffm = text.slice(0, 3000).match(/TF\.FileFunction,(NonPlated|Plated|MixedPlating)/i);
+    if (ffm) plated = /^NonPlated$/i.test(ffm[1]) ? false : /^Plated$/i.test(ffm[1]) ? true : null;
+    let pending = null; // per-tool attributes written by KiCad and X2 tools: "; #@! TA.AperFunction,Plated,PTH,ViaDrill"
+    const conv = s => {
+      if (s.includes(".")) return +s * unit;
+      const neg = s[0] === "-"; let d = s.replace(/^[+-]/, "");
+      const v = lz ? parseInt(d.padEnd(intD + decD, "0"), 10) / Math.pow(10, decD) : parseInt(d, 10) / Math.pow(10, decD);
+      return (neg ? -v : v) * unit;
+    };
+    for (const raw of text.split(/\r?\n/)) {
+      const l = raw.trim(); if (!l) continue;
+      if (l[0] === ";") { const ta = l.match(/TA\.AperFunction,(.*)$/i); if (ta) pending = { plated: !/NonPlated/i.test(ta[1]), via: /Via/i.test(ta[1]) }; continue; }
+      if (l === "M48") { inHeader = true; continue; }
+      if (l === "%" || l === "M95") { inHeader = false; continue; }
+      if (/^(METRIC|M71)/.test(l)) { unit = 1; if (!fmtSet) { intD = 3; decD = 3; } if (/TZ/.test(l)) lz = false; if (/LZ/.test(l)) lz = true; const f = l.match(/,0*(\d+)\.(\d+)/) || l.match(/,(0+)\.(0+)/); if (f) { intD = f[1].length; decD = f[2].length; fmtSet = true; } continue; }
+      if (/^(INCH|M72)/.test(l)) { unit = 25.4; if (!fmtSet) { intD = 2; decD = 4; } if (/TZ/.test(l)) lz = false; if (/LZ/.test(l)) lz = true; continue; }
+      const td = l.match(/^T(\d+).*C([\d.]+)/);
+      if (td && (inHeader || !tools[+td[1]])) { tools[+td[1]] = { d: +td[2] * unit, plated: pending ? pending.plated : null, via: pending ? pending.via : false }; pending = null; if (!inHeader) tool = +td[1]; continue; }
+      const ts = l.match(/^T(\d+)$/); if (ts) { tool = +ts[1]; continue; }
+      const c = l.match(/^(?:G0?1|G85)?X([+-]?[\d.]+)?Y?([+-]?[\d.]+)?/);
+      if (/^X|^Y|^G85|^G01/.test(l)) {
+        const xm = l.match(/X([+-]?[\d.]+)/), ym = l.match(/Y([+-]?[\d.]+)/);
+        if (xm) x = conv(xm[1]); if (ym) y = conv(ym[1]);
+        if (tool !== null && tools[tool] !== undefined) { const t = tools[tool]; holes.push({ x, y, d: t.d, plated: t.plated ?? plated, via: t.via }); }
+      }
+    }
+    return holes;
+  }
+
+  // ---------- layer role from file name / X2 FileFunction ----------
+  function role(name, head) {
+    const n = name.toLowerCase(), base = n.split("/").pop();
+    const ff = (head.match(/%TF\.FileFunction,([^*%]+)/) || [])[1] || "";
+    if (ff) {
+      if (/^Copper,L1,Top/i.test(ff) || /^Copper,L\d+,Top/i.test(ff)) return "cuF";
+      if (/^Copper,L\d+,Bot/i.test(ff)) return "cuB";
+      if (/^Copper/i.test(ff)) return "cuIn";
+      if (/^Soldermask,Top/i.test(ff)) return "maskF"; if (/^Soldermask,Bot/i.test(ff)) return "maskB";
+      if (/^Paste,Top/i.test(ff)) return "pasteF"; if (/^Paste,Bot/i.test(ff)) return "pasteB";
+      if (/^Legend,Top/i.test(ff)) return "silkF"; if (/^Legend,Bot/i.test(ff)) return "silkB";
+      if (/^Profile/i.test(ff)) return "outline";
+      if (/^(Plated|NonPlated)/i.test(ff)) return "drill";
+      return "other";
+    }
+    const ext = base.includes(".") ? base.split(".").pop() : "";
+    const E = { gtl: "cuF", gbl: "cuB", gts: "maskF", gbs: "maskB", gtp: "pasteF", gbp: "pasteB", gto: "silkF", gbo: "silkB", gko: "outline", gm1: "outline", gml: "outline", gm: "outline", g1: "cuIn", g2: "cuIn", g3: "cuIn", g4: "cuIn", drl: "drill", xln: "drill", exc: "drill", ncd: "drill", drd: "drill" };
+    if (E[ext]) return E[ext];
+    // KiCad names, EasyEDA names, Allegro .art names
+    const s = base.replace(/\.(gbr|ger|art|pho|gbx|txt|cnc|nc)$/, "");
+    if (/(^|[-_ ])(f_cu|top_?layer|toplayer|l1_top|^top|copper_top|cu_top|layer1)($|[-_ ])/.test(s) || /^l1[-_]/.test(s) || s === "top") return "cuF";
+    if (/(^|[-_ ])(b_cu|bottom_?layer|bottomlayer|bottom|bot|copper_bottom|cu_bot)($|[-_ ])/.test(s) && !/(mask|paste|silk|sold|legend|overlay)/.test(s)) return "cuB";
+    if (/(f_mask|top_?solder_?mask|mask_top|sold(er)?_?top|soldermask_top|topsoldermask|smt)/.test(s)) return "maskF";
+    if (/(b_mask|bottom_?solder_?mask|mask_bot|sold(er)?_?bot|soldermask_bot|bottomsoldermask|smb)/.test(s)) return "maskB";
+    if (/(f_paste|top_?paste|paste_top|pastemask_top|toppaste|spt)/.test(s)) return "pasteF";
+    if (/(b_paste|bottom_?paste|paste_bot|bottompaste|spb)/.test(s)) return "pasteB";
+    if (/(f_silk|top_?silk|silk_?top|silkscreen_top|legend_top|overlay_top|topsilk|sst)/.test(s)) return "silkF";
+    if (/(b_silk|bottom_?silk|silk_?bot|silkscreen_bot|legend_bot|overlay_bot|bottomsilk|ssb)/.test(s)) return "silkB";
+    if (/(edge_cuts|outline|board_?outline|boardoutline|profile|keepout|dim)/.test(s)) return "outline";
+    if (/^(l\d+|in\d|inner)/.test(s) || /inner/.test(s) || /gnd|pwr|plane/.test(s)) return "cuIn";
+    if (/drill|\.drl$/.test(n)) return "drill";
+    return "other";
+  }
+  const isGerber = head => /%FS[LT]?[AI]?X\d\dY\d\d\*%|%MO(MM|IN)\*%|G04 |%ADD\d+/.test(head);
+  const isDrill = head => /^\s*M48\b/m.test(head) || /;\s*(DRILL|FILE_FORMAT|TYPE=PLATED|#@!)/i.test(head) && /^T\d+C[\d.]+/m.test(head);
+  return { parse, drill, role, isGerber, isDrill };
+})();
+
+// ===== import/fab.js =====
+// Builds a board from manufacturing outputs that every EDA tool can produce:
+// Gerber (+ drill) for geometry, pick-and-place (坐标文件) for parts, optional IPC-D-356 / JLC flying-probe for pins & nets.
+globalThis.ImpFab = (() => {
+  const G = Geom;
+  const flip = ([x, y]) => [x, -y];
+
+  // spatial hash for nearest-point queries
+  function grid(items, cell = 1) {
+    const m = new Map(), key = (i, j) => i * 100003 + j;
+    for (const it of items) { const k = key(Math.floor(it.x / cell), Math.floor(it.y / cell)); let a = m.get(k); if (!a) m.set(k, a = []); a.push(it); }
+    return {
+      near(x, y, r) { const out = [], i0 = Math.floor((x - r) / cell), i1 = Math.floor((x + r) / cell), j0 = Math.floor((y - r) / cell), j1 = Math.floor((y + r) / cell);
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const a = m.get(key(i, j)); if (a) for (const it of a) if (Math.hypot(it.x - x, it.y - y) <= r) out.push(it); } return out; },
+      nearest(x, y, rmax = 3) { let best = null, bd = rmax; for (const it of this.near(x, y, rmax)) { const d = Math.hypot(it.x - x, it.y - y); if (d < bd) { bd = d; best = it; } } return best ? { it: best, d: bd } : null; },
+    };
+  }
+  const med = v => { const s = v.slice().sort((a, b) => a - b); return s.length ? s[s.length >> 1] : 0; };
+
+  // find transform (scale for unit, y sign, offset) that maps CPL points onto pad geometry
+  function alignCPL(cpl, pads, padRefs) {
+    const opts = [];
+    const scales = cpl.explicit ? [1] : [1, 0.0254, 25.4, 1 / 0.0254].filter((v, i, a) => a.indexOf(v) === i);
+    for (const sc of scales) for (const sy of [1, -1]) opts.push({ sc, sy });
+    let best = null;
+    if (padRefs) { // pads know their reference designators: compare centroids directly
+      const cen = {};
+      for (const p of pads) if (p.ref) { const c = cen[p.ref] ||= { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; c.x0 = Math.min(c.x0, p.x); c.y0 = Math.min(c.y0, p.y); c.x1 = Math.max(c.x1, p.x); c.y1 = Math.max(c.y1, p.y); }
+      for (const o of opts) {
+        const dx = [], dy = [];
+        for (const r of cpl.rows) { const c = cen[r.ref]; if (!c) continue; dx.push((c.x0 + c.x1) / 2 - r.x * o.sc); dy.push((c.y0 + c.y1) / 2 - r.y * o.sc * o.sy); }
+        if (!dx.length) continue;
+        const ox = med(dx), oy = med(dy);
+        const res = med(cpl.rows.filter(r => cen[r.ref]).map(r => { const c = cen[r.ref]; return Math.hypot((c.x0 + c.x1) / 2 - r.x * o.sc - ox, (c.y0 + c.y1) / 2 - r.y * o.sc * o.sy - oy); }));
+        if (!best || res < best.res) best = { ...o, ox, oy, res };
+      }
+      return best;
+    }
+    // no designators on pads: part centres sit midway between neighbouring pads (true for passives, most ICs),
+    // so align CPL points to those midpoints using a robust (median) score; keep the given origin when it already fits.
+    const pg = grid(pads, 1.5), targets = [];
+    for (const p of pads) { // midpoints with the 3 nearest neighbours (the partner pad is not always the closest one)
+      targets.push({ x: p.x, y: p.y });
+      const nb = pg.near(p.x, p.y, 4).filter(q => q !== p).map(q => [Math.hypot(q.x - p.x, q.y - p.y), q]).sort((a, b) => a[0] - b[0]).slice(0, 3);
+      for (const [, q] of nb) targets.push({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+    }
+    const g = grid(targets, 1);
+    const score = (o, ox, oy) => { const ds = cpl.rows.map(r => { const n = g.nearest(r.x * o.sc + ox, r.y * o.sc * o.sy + oy, 3); return n ? n.d : 3; }); return med(ds); };
+    const pb = G.bboxOf(pads.map(p => [p.x, p.y]));
+    for (const o of opts) {
+      const z = score(o, 0, 0);
+      if (z < 0.1) { if (!best || z < best.res) best = { ...o, ox: 0, oy: 0, res: z }; continue; }
+      const cb = G.bboxOf(cpl.rows.map(r => [r.x * o.sc, r.y * o.sc * o.sy]));
+      const starts = [[0, 0], [(pb[0] + pb[2]) / 2 - (cb[0] + cb[2]) / 2, (pb[1] + pb[3]) / 2 - (cb[1] + cb[3]) / 2], [pb[0] - cb[0], pb[1] - cb[1]]];
+      for (const [sx, sy0] of starts) {
+        let cx = sx, cy = sy0, cs = score(o, cx, cy);
+        for (const step of [2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01]) {
+          let improved = true, guard = 0;
+          while (improved && guard++ < 60) {
+            improved = false;
+            for (const [ddx, ddy] of [[step, 0], [-step, 0], [0, step], [0, -step]]) { const sc2 = score(o, cx + ddx, cy + ddy); if (sc2 < cs - 1e-6) { cs = sc2; cx += ddx; cy += ddy; improved = true; } }
+          }
+        }
+        if (!best || cs < best.res - 1e-6) best = { ...o, ox: cx, oy: cy, res: cs };
+      }
+      if (best && best.sc === o.sc && best.sy === o.sy && z <= best.res + 0.03) best = { ...o, ox: 0, oy: 0, res: z }; // keep the file's own origin unless clearly worse
+    }
+    return best;
+  }
+
+  // inputs: {layers:{cuF,cuB,pasteF,pasteB,silkF,silkB,outline}: parsed gerbers, holes:[...], cpl, net:{pads, comps, source}, names}
+  function build(inp) {
+    const b = G.newBoard(), warn = [], edgePts = [];
+    const L = inp.layers;
+    // outline
+    if (L.outline) {
+      for (const d of L.outline.draws) { const pts = d.pts.map(flip); b.edges += G.lineD(pts); edgePts.push(...pts); }
+      for (const r of L.outline.regions) { const pts = r.pts.map(flip); b.edges += G.polyD(pts); edgePts.push(...pts); }
+    } else warn.push("没有板框层，板子外形按焊盘范围估计");
+    // tracks & silk
+    const tr = { F: [], B: [] };
+    for (const [s, l] of [["F", L.cuF], ["B", L.cuB]]) if (l) for (const d of l.draws) if (d.dark) tr[s].push([d.w, G.lineD(d.pts.map(flip))]);
+    b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
+    for (const [s, l] of [["F", L.silkF], ["B", L.silkB]]) if (l) b.silk[s] = l.draws.map(d => G.lineD(d.pts.map(flip))).join("") + l.regions.map(r => G.polyD(r.pts.map(flip))).join("");
+    const holes = inp.holes || [];
+    const hg = grid(holes, 1);
+    const flashOf = { F: L.cuF ? L.cuF.flashes.filter(f => f.dark) : [], B: L.cuB ? L.cuB.flashes.filter(f => f.dark) : [] };
+    const fg = { F: grid(flashOf.F, 1), B: grid(flashOf.B, 1) };
+    const shapeAt = (f) => f.sh.polys.map(poly => poly.map(([x, y]) => flip([x + f.x, y + f.y])));
+
+    // ---- pads ----
+    let pads = [], padRefs = false;
+    if (inp.net && inp.net.pads && inp.net.pads.length) {
+      padRefs = true;
+      for (const q of inp.net.pads) {
+        if (q.via) { b.vias.push([G.f3(q.x), G.f3(-q.y), G.f3(Math.max(q.hole, 0.3) / 2 + 0.1)]); continue; }
+        const side = q.side === "B" ? "B" : "F";
+        const hit = fg[side].nearest(q.x, q.y, 0.05) || (q.side === "T" ? fg.B.nearest(q.x, q.y, 0.05) : null);
+        let polys;
+        if (hit) polys = shapeAt(hit.it);
+        else { const w = q.w || 0.5, h = q.h || q.w || 0.5; polys = [(/^[CE]/i.test(q.shape || "") ? G.circ(0, 0, w / 2) : G.rect(w, h)).map(([x, y]) => { const r = G.rotM(x, y, q.rot || 0); return flip([r[0] + q.x, r[1] + q.y]); })]; }
+        pads.push({ ref: q.ref, pin: q.pin, net: q.net, x: q.x, y: q.y, side: q.side === "T" ? "T" : side, polys, hole: q.hole || 0, plated: q.plated !== false });
+      }
+    } else {
+      const x2 = flashOf.F.concat(flashOf.B).some(f => f.attrs && f.attrs.P);
+      if (x2) {
+        padRefs = true;
+        for (const s of ["F", "B"]) for (const f of flashOf[s]) { const P = f.attrs.P; if (!P) continue; const h = hg.nearest(f.x, f.y, 0.05); pads.push({ ref: P[0], pin: P[1] || "", net: (f.attrs.N || [""])[0], x: f.x, y: f.y, side: h ? "T" : s, polys: shapeAt(f), hole: h ? h.it.d : 0, plated: h ? h.it.plated !== false : true }); }
+      } else {
+        // geometry only: SMD pads come from paste flashes, plated-hole pads from copper flashes on drill hits
+        for (const s of ["F", "B"]) {
+          const paste = L["paste" + s], cu = flashOf[s];
+          const used = new Set();
+          // paste openings → the copper pad that contains them (an exposed pad may have several paste windows)
+          const holder = pf => { let best = null, area = 1e9; for (const f of fg[s].near(pf.x, pf.y, 6)) { const bb = G.bboxOf(f.sh.polys.flat()); if (pf.x >= f.x + bb[0] - 0.01 && pf.x <= f.x + bb[2] + 0.01 && pf.y >= f.y + bb[1] - 0.01 && pf.y <= f.y + bb[3] + 0.01) { const a = (bb[2] - bb[0]) * (bb[3] - bb[1]); if (a < area) { area = a; best = f; } } } return best; };
+          if (paste) for (const pf of paste.flashes) { const f = holder(pf) || pf; if (used.has(f)) continue; used.add(f); pads.push({ ref: "", pin: "", net: "", x: f.x, y: f.y, side: s, polys: shapeAt(f), hole: 0, plated: true }); }
+          for (const f of cu) {
+            if (used.has(f)) continue;
+            const h = hg.nearest(f.x, f.y, 0.05);
+            if (h) { if (s === "B" && fg.F.nearest(f.x, f.y, 0.05)) continue; if (!h.it.via && (h.it.d >= 0.5 || h.it.plated === false)) pads.push({ ref: "", pin: "", net: "", x: f.x, y: f.y, side: "T", polys: shapeAt(f), hole: h.it.d, plated: h.it.plated !== false }); }
+            else if (!paste) pads.push({ ref: "", pin: "", net: "", x: f.x, y: f.y, side: s, polys: shapeAt(f), hole: 0, plated: true });
+          }
+        }
+        warn.push("没有 IPC-356 网表或飞针文件：焊盘按距离归到最近的器件，没有引脚编号和网络，“测引脚”不可用");
+      }
+    }
+    if (!b.vias.length) for (const h of holes) if (h.plated !== false && (h.via || h.d < 0.5) && !pads.some(p => Math.abs(p.x - h.x) < 0.05 && Math.abs(p.y - h.y) < 0.05)) b.vias.push([G.f3(h.x), G.f3(-h.y), G.f3(h.d / 2 + 0.12)]);
+
+    // ---- components ----
+    const comps = new Map();
+    let cplInfo = null;
+    if (inp.cpl && inp.cpl.rows.length) {
+      const al = alignCPL(inp.cpl, pads.filter(p => p.side !== "T" || true), padRefs) || { sc: 1, sy: 1, ox: 0, oy: 0, res: 0 };
+      cplInfo = al;
+      if (Math.abs(al.ox) > 0.05 || Math.abs(al.oy) > 0.05) warn.push(`坐标文件与 Gerber 原点不同，已自动对齐（偏移 ${al.ox.toFixed(2)}, ${al.oy.toFixed(2)} mm）`);
+      if (al.sc !== 1) warn.push(`坐标文件单位按 ${al.sc === 0.0254 ? "mil" : al.sc === 25.4 ? "inch" : "mm"} 处理`);
+      if (al.sy === -1) warn.push("坐标文件的 Y 轴方向与 Gerber 相反，已翻转");
+      if (al.res > 1) warn.push(`坐标文件和 Gerber 对不太上（平均偏差 ${al.res.toFixed(2)} mm），器件位置可能不准`);
+      for (const r of inp.cpl.rows) comps.set(r.ref, { ref: r.ref, x: r.x * al.sc + al.ox, y: r.y * al.sc * al.sy + al.oy, rot: r.rot, side: r.side, val: r.val, fp: r.fp, pads: [] });
+    } else if (inp.net && inp.net.comps && inp.net.comps.length) {
+      for (const c of inp.net.comps) comps.set(c.ref, { ...c, val: "", fp: "", pads: [] });
+    }
+    if (padRefs) {
+      for (const p of pads) {
+        if (!p.ref) continue;
+        let c = comps.get(p.ref);
+        if (!c) { c = { ref: p.ref, x: null, y: null, rot: 0, side: null, val: "", fp: "", pads: [] }; comps.set(p.ref, c); }
+        c.pads.push(p);
+      }
+    } else if (comps.size) {
+      // Most footprints are point-symmetric about their centre: a pad whose mirror image through a part's centre is
+      // also a pad (same size) very likely belongs to that part. Fall back to the nearest centre otherwise.
+      const cg = grid([...comps.values()], 2), padG = grid(pads, 1);
+      const R0 = { "01005": 0.35, "0201": 0.55, "0402": 0.85, "0603": 1.2, "0805": 1.5, "1206": 2.1, "1210": 2.1, "1812": 3, "2010": 3, "2512": 3.6 };
+      const maxR = c => {
+        const f = (c.fp || (inp.bom && inp.bom[c.ref] && inp.bom[c.ref].fp) || "");
+        const k = (f.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1];
+        if (k) return R0[k];
+        if (/SOD-?(323|523|923)|SC-?79/i.test(f)) return 1.6; if (/SOD-?123/i.test(f)) return 2.2; if (/SOT-?(23|323|523|363|353|563)|SC-?70|SC-?88/i.test(f)) return 1.8;
+        if (/^(R|C|L|FB)\d/i.test(c.ref)) return 2.2;
+        return 15;
+      };
+      const sz = p => { const bb = G.bboxOf(p.polys.flat()); return [bb[2] - bb[0], bb[3] - bb[1]]; };
+      const sameSize = (a, b) => { const x = sz(a), y = sz(b); return Math.abs(Math.min(...x) - Math.min(...y)) < 0.03 && Math.abs(Math.max(...x) - Math.max(...y)) < 0.03; };
+      const okSide = (p, c) => p.side === "T" || c.side === p.side;
+      const left = [];
+      for (const p of pads) {
+        let best = null, bd = 1e9;
+        for (const c of cg.near(p.x, p.y, 15)) {
+          if (!okSide(p, c)) continue;
+          const d = Math.hypot(c.x - p.x, c.y - p.y);
+          if (d > maxR(c)) continue;
+          const mx = 2 * c.x - p.x, my = 2 * c.y - p.y;
+          const twin = d < 0.03 ? p : padG.near(mx, my, 0.04).find(q => q.side === p.side && sameSize(p, q));
+          if (twin && d < bd) { bd = d; best = c; }
+        }
+        if (best) best.pads.push(p); else left.push(p);
+      }
+      for (const p of left) { // asymmetric pads (SOT-23 etc.): nearest part whose existing pads are close by
+        let best = null, bd = 1e9;
+        for (const c of cg.near(p.x, p.y, 12)) {
+          if (!okSide(p, c)) continue;
+          let d = Math.hypot(c.x - p.x, c.y - p.y);
+          if (d > maxR(c) + 0.5) continue;
+          if (c.pads.length) { const bb = G.bboxOf(c.pads.map(q => [q.x, q.y])); const dx = Math.max(bb[0] - p.x, 0, p.x - bb[2]), dy = Math.max(bb[1] - p.y, 0, p.y - bb[3]); d = Math.min(d, Math.hypot(dx, dy) + 0.2); }
+          if (d < bd) { bd = d; best = c; }
+        }
+        if (best) best.pads.push(p);
+      }
+    } else warn.push("没有坐标文件，无法知道哪个焊盘属于哪个器件");
+
+    for (const c of comps.values()) {
+      const recs = c.pads.map(p => {
+        const kind = p.hole > 0 ? (p.plated ? 1 : 2) : 0;
+        const holeD = p.hole > 0 ? G.polyD(G.circ(p.x, -p.y, p.hole / 2, 20).reverse()) : "";
+        return G.padRec(p.pin || "", p.net || "", p.polys, kind, holeD);
+      });
+      let side = c.side;
+      if (!side) { const smd = c.pads.filter(p => p.side !== "T"); side = smd.length && smd.every(p => p.side === "B") ? "B" : "F"; }
+      let bb = G.bboxOf(recs.flatMap(q => [[q[7][0], q[7][1]], [q[7][2], q[7][3]]]));
+      const cx = c.x != null ? c.x : (bb[0] + bb[2]) / 2, cy = c.x != null ? -c.y : (bb[1] + bb[3]) / 2;
+      if (!G.validBB(bb)) bb = [cx - .5, cy - .5, cx + .5, cy + .5];
+      const m = 0.15, body = G.polyD([[bb[0] - m, bb[1] - m], [bb[2] + m, bb[1] - m], [bb[2] + m, bb[3] + m], [bb[0] - m, bb[3] + m]]);
+      const p1 = recs.find(q => q[0] === "1");
+      const tht = recs.length && recs.every(q => q[3] !== 0) ? 1 : 0;
+      b.parts.push({ r: c.ref, s: side, c: [G.f3(cx), G.f3(cy)], rot: c.rot || 0, bb: [bb[0] - m, bb[1] - m, bb[2] + m, bb[3] + m].map(G.f3), pads: recs, body, silk: "",
+        val: c.val || "", fp: c.fp || "", props: {}, sheet: "", p1: p1 ? [p1[4], p1[5]] : null, tht, dnp: 0, nobom: 0, nopin: padRefs ? 0 : 1 });
+    }
+    const board = G.finishBoard(b, edgePts);
+    board.warn = warn;
+    board.noNets = !padRefs || !pads.some(p => p.net);
+    board.align = cplInfo;
+    return board;
+  }
+  return { build, alignCPL };
+})();
+
+// ===== import/odb.js =====
+// ODB++ importer (Altium, Allegro, PADS, Xpedition, KiCad 9+). Input: files relative to the ODB++ root.
+globalThis.ImpODB = (() => {
+  const G = Geom;
+  const flip = ([x, y]) => [x, -y];
+  async function readText(f) { let u8 = await f.read(); if (u8[0] === 0x1f && u8[1] === 0x9d) u8 = Files.unZ(u8); else if (u8[0] === 0x1f && u8[1] === 0x8b) u8 = await Files.gunzip(u8); return Files.decodeText(u8); }
+  const unitOf = t => /^\s*(UNITS\s*=\s*INCH|U\s+INCH)/im.test(t) ? 25.4 : 1;
+
+  // contour / simple shapes → polygons (local units already scaled)
+  function shapeReader(s) {
+    let polys = [], cur = null;
+    return {
+      line(tok) {
+        const k = tok[0], n = i => +tok[i] * s;
+        if (k === "RC") { const x = n(1), y = n(2), w = n(3), h = n(4); polys.push([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]); }
+        else if (k === "CR") polys.push(G.circ(n(1), n(2), n(3)));
+        else if (k === "SQ") { const x = n(1), y = n(2), h = n(3); polys.push([[x - h, y - h], [x + h, y - h], [x + h, y + h], [x - h, y + h]]); }
+        else if (k === "OB") { cur = { pts: [[n(1), n(2)]], hole: tok[3] === "H" }; }
+        else if (k === "OS" && cur) cur.pts.push([n(1), n(2)]);
+        else if (k === "OC" && cur) cur.pts.push(...G.arcPts(cur.pts[cur.pts.length - 1], [n(1), n(2)], [n(3), n(4)], tok[5] === "Y", 10));
+        else if (k === "OE" && cur) { if (!cur.hole) polys.push(cur.pts); cur = null; }
+        else return false;
+        return true;
+      },
+      take() { const p = polys; polys = []; return p; },
+    };
+  }
+  function parseEda(t) {
+    const s = unitOf(t), nets = [], pkgs = [];
+    let pkg = null, target = null; const sr = shapeReader(s);
+    const flushTo = () => { if (target) target.push(...sr.take()); else sr.take(); };
+    for (const raw of t.split(/\r?\n/)) {
+      const l = raw.trim(); if (!l || l[0] === "#") continue;
+      const tok = l.split(/\s+/);
+      if (tok[0] === "NET") { flushTo(); nets.push(tok[1] === "$NONE$" ? "" : (tok[1] || "")); pkg = null; target = null; continue; }
+      if (tok[0] === "PKG") { flushTo(); pkg = { name: tok[1], outline: [], pins: [] }; pkgs.push(pkg); target = pkg.outline; continue; }
+      if (tok[0] === "PIN" && pkg) { flushTo(); const pin = { name: tok[1], type: tok[2], x: +tok[3] * s, y: +tok[4] * s, shapes: [] }; pkg.pins.push(pin); target = pin.shapes; continue; }
+      if (sr.line(tok)) { if (tok[0] !== "OB" && tok[0] !== "OS" && tok[0] !== "OC") flushTo(); continue; }
+      if (/^(SNT|FID|FGR|PRP|LYR|HDR|UNITS|@|&)/.test(tok[0])) { flushTo(); if (tok[0] === "SNT" || tok[0] === "FGR") target = null; }
+    }
+    flushTo();
+    return { nets, pkgs };
+  }
+  function parseComps(t) {
+    const s = unitOf(t), comps = []; let c = null;
+    const unq = v => v.replace(/^'|'$/g, "");
+    for (const raw of t.split(/\r?\n/)) {
+      const l = raw.trim(); if (!l || l[0] === "#") continue;
+      const tok = l.replace(/;.*$/, "").trim().split(/\s+/);
+      if (tok[0] === "CMP") { c = { pkg: +tok[1], x: +tok[2] * s, y: +tok[3] * s, rot: +tok[4] || 0, mir: tok[5] === "M", ref: tok[6], part: tok.slice(7).join(" "), props: {}, pins: [] }; comps.push(c); }
+      else if (tok[0] === "PRP" && c) { const m = l.match(/^PRP\s+(\S+)\s+(.*)$/); if (m) c.props[m[1]] = unq(m[2].replace(/\s+\d+$/, "").trim()); }
+      else if (tok[0] === "TOP" && c) c.pins.push({ idx: +tok[1], x: +tok[2] * s, y: +tok[3] * s, rot: +tok[4] || 0, mir: tok[5] === "M", net: +tok[6], name: tok[8] ?? "" });
+    }
+    return comps;
+  }
+  // feature files: symbol table + L/A/P records
+  function parseFeatures(t) {
+    const s = unitOf(t), symScale = s === 1 ? 0.001 : 0.0254; // microns for metric files, mils for imperial
+    const syms = {}, lines = [], pads = [], surfaces = [];
+    let surf = null; const sr = shapeReader(s);
+    const symSize = name => { if (!name) return 0.1; let m = name.match(/^r([\d.]+)/); if (m) return +m[1] * symScale; m = name.match(/^s([\d.]+)/); if (m) return +m[1] * symScale; m = name.match(/^rect([\d.]+)x([\d.]+)/); if (m) return Math.min(+m[1], +m[2]) * symScale; m = name.match(/^oval([\d.]+)x([\d.]+)/); if (m) return Math.min(+m[1], +m[2]) * symScale; return 0.1; };
+    for (const raw of t.split(/\r?\n/)) {
+      const l = raw.trim(); if (!l || l[0] === "#") continue;
+      const tok = l.replace(/;.*$/, "").trim().split(/\s+/);
+      if (/^\$\d+$/.test(tok[0])) { syms[tok[0].slice(1)] = tok[1]; continue; }
+      if (tok[0] === "L") lines.push({ pts: [[+tok[1] * s, +tok[2] * s], [+tok[3] * s, +tok[4] * s]], w: symSize(syms[tok[5]]), dark: tok[6] !== "N" });
+      else if (tok[0] === "A") { const a = [+tok[1] * s, +tok[2] * s]; lines.push({ pts: [a, ...G.arcPts(a, [+tok[3] * s, +tok[4] * s], [+tok[5] * s, +tok[6] * s], tok[10] === "Y", 10)], w: symSize(syms[tok[7]]), dark: tok[8] !== "N" }); }
+      else if (tok[0] === "P") pads.push({ x: +tok[1] * s, y: +tok[2] * s, d: symSize(syms[tok[3]]), sym: syms[tok[3]] || "" });
+      else if (tok[0] === "S") { surf = []; }
+      else if (tok[0] === "SE") { if (surf) surfaces.push(...sr.take()); surf = null; }
+      else if (surf && sr.line(tok)) continue;
+    }
+    return { lines, pads, surfaces };
+  }
+  function parseMatrix(t) {
+    const out = [];
+    for (const blk of t.matchAll(/LAYER\s*\{([^}]*)\}/g)) {
+      const o = {}; for (const m of blk[1].matchAll(/(\w+)\s*=\s*(.*)/g)) o[m[1].toUpperCase()] = m[2].trim();
+      out.push({ name: (o.NAME || "").toLowerCase(), type: (o.TYPE || "").toUpperCase(), row: +o.ROW || 0, ctx: (o.CONTEXT || "").toUpperCase(), add: (o.ADD_TYPE || "").toUpperCase() });
+    }
+    return out.sort((a, b) => a.row - b.row);
+  }
+  // package frame → board frame; conventions differ between exporters, pick the one matching absolute pin positions
+  const CONV = [
+    (x, y, r, m) => { if (m) x = -x; return G.rotM(x, y, -r); },  // mirror, then clockwise
+    (x, y, r, m) => { const q = G.rotM(x, y, -r); if (m) q[0] = -q[0]; return q; },
+    (x, y, r, m) => { if (m) x = -x; return G.rotM(x, y, r); },
+    (x, y, r, m) => { const q = G.rotM(x, y, r); if (m) q[0] = -q[0]; return q; },
+    (x, y, r) => G.rotM(x, y, -r),   // package data already flipped for bottom parts (KiCad 9/10 export)
+    (x, y, r) => G.rotM(x, y, r),
+  ];
+
+  async function parse(files) {
+    const by = re => files.find(f => re.test(f.path));
+    const stepName = ((files.map(f => f.path.match(/^steps\/([^/]+)\//i)).find(Boolean)) || [])[1];
+    if (!stepName) throw new Error("ODB++ 里没有 steps 目录");
+    const P = (rel) => files.find(f => f.path.toLowerCase().replace(/\.z$/, "") === `steps/${stepName}/${rel}`.toLowerCase());
+    const edaF = P("eda/data"); if (!edaF) throw new Error("ODB++ 里没有 eda/data（器件封装和网络）");
+    const eda = parseEda(await readText(edaF));
+    const matF = by(/^matrix\/matrix(\.z)?$/i), matrix = matF ? parseMatrix(await readText(matF)) : [];
+    const b = G.newBoard(), edgePts = [];
+    const profF = P("profile");
+    if (profF) { const f = parseFeatures(await readText(profF)); for (const poly of f.surfaces) { const pts = poly.map(flip); b.edges += G.polyD(pts); edgePts.push(...pts); } }
+    // copper / silk / drill layers
+    const cu = matrix.filter(l => l.ctx === "BOARD" && /SIGNAL|POWER_GROUND|MIXED/.test(l.type));
+    const topCu = cu[0], botCu = cu[cu.length - 1];
+    const layerFile = l => P(`layers/${l.name}/features`);
+    const tr = { F: [], B: [] };
+    for (const [side, l] of [["F", topCu], ["B", botCu]]) { if (!l || (side === "B" && cu.length < 2)) continue; const f = layerFile(l); if (!f) continue; const ft = parseFeatures(await readText(f)); for (const ln of ft.lines) if (ln.dark) tr[side].push([ln.w, G.lineD(ln.pts.map(flip))]); }
+    b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
+    for (const l of matrix.filter(l => l.type === "SILK_SCREEN")) {
+      const side = topCu && l.row < topCu.row ? "F" : botCu && l.row > botCu.row ? "B" : /bot|^b\./.test(l.name) ? "B" : "F";
+      const f = layerFile(l); if (!f) continue; const ft = parseFeatures(await readText(f));
+      b.silk[side] += ft.lines.map(ln => G.lineD(ln.pts.map(flip))).join("");
+    }
+    const holes = [];
+    for (const l of matrix.filter(l => l.type === "DRILL")) { const f = layerFile(l); if (!f) continue; const ft = parseFeatures(await readText(f)); const plated = !/non.?plated|npth/i.test(l.name + " " + l.add); for (const p of ft.pads) holes.push({ x: p.x, y: -p.y, d: p.d, plated }); }
+    const hg = holes;
+
+    // components
+    const convCount = CONV.map(() => 0);
+    for (const [side, rel] of [["F", "layers/comp_+_top/components"], ["B", "layers/comp_+_bot/components"]]) {
+      const f = P(rel); if (!f) continue;
+      for (const c of parseComps(await readText(f))) {
+        const pkg = eda.pkgs[c.pkg] || { name: "", outline: [], pins: [] };
+        // choose the transform convention using absolute pin centres
+        let ci = convCount.indexOf(Math.max(...convCount));
+        if (c.pins.length) {
+          let best = 1e9;
+          CONV.forEach((fn, i) => { let e = 0; for (const tp of c.pins) { const pp = pkg.pins[tp.idx]; if (!pp) continue; const q = fn(pp.x, pp.y, c.rot, c.mir); e += Math.hypot(q[0] + c.x - tp.x, q[1] + c.y - tp.y); } if (e < best - 1e-9) { best = e; ci = i; } });
+          convCount[ci]++;
+        }
+        const T = ([x, y]) => { const q = CONV[ci](x, y, c.rot, c.mir); return flip([q[0] + c.x, q[1] + c.y]); };
+        const pins = c.pins.length ? c.pins : pkg.pins.map((p, i) => ({ idx: i, net: -1, name: p.name }));
+        const pads = pins.map(tp => {
+          const pp = pkg.pins[tp.idx] || { name: tp.name, x: tp.x - c.x, y: tp.y - c.y, shapes: [] };
+          let polys = pp.shapes.map(poly => poly.map(T));
+          if (!polys.length) { const ctr = tp.x !== undefined ? flip([tp.x, tp.y]) : T([pp.x, pp.y]); polys = [G.circ(ctr[0], ctr[1], 0.25)]; }
+          const bb = G.bboxOf(polys.flat()), mx = (bb[0] + bb[2]) / 2, my = (bb[1] + bb[3]) / 2;
+          const h = hg.find(h => Math.abs(h.x - mx) < 0.03 && Math.abs(h.y - my) < 0.03);
+          const kind = h ? (h.plated ? 1 : 2) : (pp.type === "T" ? 1 : 0);
+          return G.padRec(tp.name || pp.name, tp.net >= 0 ? eda.nets[tp.net] || "" : "", polys, kind, h ? G.polyD(G.circ(h.x, h.y, h.d / 2, 20).reverse()) : "");
+        });
+        const body = pkg.outline.map(o => G.polyD(o.map(T))).join("");
+        const bpts = pkg.outline.flatMap(o => o.map(T));
+        let bb = G.bboxOf(pads.flatMap(p => [[p[7][0], p[7][1]], [p[7][2], p[7][3]]]).concat(bpts));
+        const ctr = flip([c.x, c.y]);
+        if (!G.validBB(bb)) bb = [ctr[0] - .5, ctr[1] - .5, ctr[0] + .5, ctr[1] + .5];
+        const props = { ...c.props };
+        const val = props.Value || props.VALUE || props.value || props.Comment || props.COMMENT || "";
+        const mpn = Object.entries(props).find(([k]) => /part.?number|^mpn$|manufacturer.?part/i.test(k)); if (mpn) props.MPN = mpn[1];
+        const lcsc = Object.entries(props).find(([k]) => /lcsc|jlc/i.test(k)); if (lcsc) props.LCSC = lcsc[1];
+        const p1 = pads.find(p => p[0] === "1");
+        b.parts.push({ r: c.ref, s: side, c: ctr.map(G.f3), rot: c.rot, bb: bb.map(G.f3), pads, body, silk: "", val, fp: pkg.name, props, sheet: "",
+          p1: p1 ? [p1[4], p1[5]] : null, tht: pads.length && pads.every(p => p[3] !== 0) ? 1 : 0, dnp: 0, nobom: 0 });
+      }
+    }
+    for (const h of holes) if (h.plated && h.d < 0.5 && !b.parts.some(p => p.pads.some(q => Math.abs(q[4] - h.x) < 0.03 && Math.abs(q[5] - h.y) < 0.03))) b.vias.push([G.f3(h.x), G.f3(h.y), G.f3(h.d / 2 + 0.12)]);
+    b._conv = convCount;
+    return G.finishBoard(b, edgePts);
+  }
+  return { parse };
+})();
+
+// ===== import/altium.js =====
+// Altium Designer .PcbDoc importer (OLE compound file with Pcb 6 streams).
+// Record layouts follow KiCad's Altium importer (pcbnew/pcb_io/altium/altium_parser_pcb.cpp).
+globalThis.ImpAltium = (() => {
+  const G = Geom;
+  const U = 2.54e-6; // Altium internal unit: 1/10000 mil → mm
+
+  // ---------- OLE compound file ----------
+  function cfb(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    if (dv.getUint32(0, true) !== 0xE011CFD0) throw new Error("不是 Altium PcbDoc（OLE 复合文档）");
+    const ss = 1 << dv.getUint16(30, true), mss = 1 << dv.getUint16(32, true);
+    const nFat = dv.getUint32(44, true), dir0 = dv.getUint32(48, true), cutoff = dv.getUint32(56, true);
+    const mfat0 = dv.getUint32(60, true), nMfat = dv.getUint32(64, true);
+    let difat0 = dv.getUint32(68, true), nDifat = dv.getUint32(72, true);
+    const off = s => (s + 1) * ss;
+    const fatSectors = [];
+    for (let i = 0; i < 109 && fatSectors.length < nFat; i++) fatSectors.push(dv.getUint32(76 + i * 4, true));
+    while (nDifat-- > 0 && difat0 < 0xFFFFFFFA) { const o = off(difat0); for (let i = 0; i < ss / 4 - 1 && fatSectors.length < nFat; i++) fatSectors.push(dv.getUint32(o + i * 4, true)); difat0 = dv.getUint32(o + ss - 4, true); }
+    const fat = new Uint32Array(fatSectors.length * ss / 4);
+    fatSectors.forEach((s, k) => { const o = off(s); for (let i = 0; i < ss / 4; i++) fat[k * ss / 4 + i] = dv.getUint32(o + i * 4, true); });
+    const chain = s => { const out = []; let guard = 0; while (s < 0xFFFFFFFA && guard++ < 1e7) { out.push(s); s = fat[s]; } return out; };
+    const readChain = (s, size) => { const c = chain(s), out = new Uint8Array(c.length * ss); c.forEach((sec, i) => out.set(u8.subarray(off(sec), off(sec) + ss), i * ss)); return size !== undefined ? out.subarray(0, size) : out; };
+    const dirBytes = readChain(dir0);
+    const ddv = new DataView(dirBytes.buffer, dirBytes.byteOffset, dirBytes.byteLength);
+    const ents = [];
+    for (let o = 0; o + 128 <= dirBytes.length; o += 128) {
+      const nl = ddv.getUint16(o + 64, true); let name = "";
+      for (let i = 0; i < Math.max(0, nl / 2 - 1); i++) name += String.fromCharCode(ddv.getUint16(o + i * 2, true));
+      ents.push({ name, type: dirBytes[o + 66], left: ddv.getUint32(o + 68, true), right: ddv.getUint32(o + 72, true), child: ddv.getUint32(o + 76, true), start: ddv.getUint32(o + 116, true), size: ddv.getUint32(o + 120, true) });
+    }
+    const root = ents[0];
+    const ministream = root ? readChain(root.start, root.size) : new Uint8Array(0);
+    const mfat = []; for (const s of chain(mfat0).slice(0, nMfat || 1e9)) { const o = off(s); for (let i = 0; i < ss / 4; i++) mfat.push(dv.getUint32(o + i * 4, true)); }
+    const readMini = (s, size) => { const out = new Uint8Array(size); let p = 0, guard = 0; while (s < 0xFFFFFFFA && p < size && guard++ < 1e7) { out.set(ministream.subarray(s * mss, s * mss + Math.min(mss, size - p)), p); p += mss; s = mfat[s]; } return out; };
+    // walk the red-black tree into "Storage/Stream" paths
+    const files = {};
+    const walk = (id, prefix) => {
+      if (id === 0xFFFFFFFF || id >= ents.length) return;
+      const e = ents[id]; walk(e.left, prefix); walk(e.right, prefix);
+      const path = prefix ? prefix + "/" + e.name : e.name;
+      if (e.type === 2) files[path] = () => e.size < cutoff ? readMini(e.start, e.size) : readChain(e.start, e.size);
+      else if (e.type === 1) walk(e.child, path);
+    };
+    walk(root.child, "");
+    return files;
+  }
+
+  // ---------- record readers ----------
+  const latin = new TextDecoder("windows-1252");
+  function propsRecords(u8) {
+    const out = [], dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); let p = 0;
+    while (p + 4 <= u8.length) {
+      let len = dv.getUint32(p, true); p += 4; len &= 0x00ffffff; if (p + len > u8.length) break;
+      const raw = u8.subarray(p, p + len); p += len;
+      let s = latin.decode(raw).replace(/\0+$/, "");
+      const o = {};
+      for (const kv of s.split("|")) { const i = kv.indexOf("="); if (i > 0) o[kv.slice(0, i).trim().toUpperCase()] = kv.slice(i + 1); }
+      for (const k of Object.keys(o)) if (k.startsWith("%UTF8%")) { try { o[k.slice(6)] = new TextDecoder().decode(Uint8Array.from(o[k], c => c.charCodeAt(0) & 255)); } catch (e) {} }
+      out.push(o);
+    }
+    return out;
+  }
+  const unit = v => { if (v === undefined || v === "") return 0; const m = String(v).trim().match(/^(-?[\d.]+(?:e[-+]?\d+)?)\s*(mil|mm|in)?$/i); if (!m) return 0; const n = +m[1]; const u = (m[2] || "mil").toLowerCase(); return u === "mm" ? n : u === "in" ? n * 25.4 : n * 0.0254; };
+  class Bin {
+    constructor(u8) { this.u8 = u8; this.dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); this.p = 0; this.end = 0; }
+    get left() { return this.u8.length - this.p; }
+    u8r() { return this.u8[this.p++]; } u16() { const v = this.dv.getUint16(this.p, true); this.p += 2; return v; } u32() { const v = this.dv.getUint32(this.p, true); this.p += 4; return v; }
+    i32() { const v = this.dv.getInt32(this.p, true); this.p += 4; return v; } f64() { const v = this.dv.getFloat64(this.p, true); this.p += 8; return v; }
+    skip(n) { this.p += n; }
+    sub() { const len = this.u32(); this.end = this.p + len; return len; } // subrecord: uint32 length
+    skipSub() { this.p = this.end; }
+    pos() { const x = this.i32() * U, y = this.i32() * U; return [x, -y]; } // Altium is Y up → flip
+    size() { return [this.i32() * U, this.i32() * U]; }
+    str() { const n = this.u8r(); const s = latin.decode(this.u8.subarray(this.p, this.p + n)); this.p += n; return s; }
+  }
+  // pads: returns [{name, layer, net, comp, x, y, top:[w,h], shape, dir, hole, plated, radius%}]
+  function readPads(u8) {
+    const r = new Bin(u8), out = [];
+    while (r.left > 5) {
+      const type = r.u8r(); if (type !== 2) break;
+      r.sub(); const name = r.str(); r.skipSub();
+      for (let k = 0; k < 3; k++) { r.sub(); r.skipSub(); }
+      const len5 = r.sub(), start5 = r.p;
+      const layer = r.u8r(); r.u8r(); r.u8r();
+      const net = r.u16(); r.skip(2); const comp = r.u16(); r.skip(4);
+      const [x, y] = r.pos(); const top = r.size(); r.size(); const bot = r.size();
+      const hole = r.i32() * U;
+      const topShape = r.u8r(); r.u8r(); const botShape = r.u8r();
+      const dir = r.f64(); const plated = r.u8r() !== 0;
+      r.skipSub();
+      let radius = null, altShape = null;
+      if (r.left > 4) {
+        const len6 = r.sub();
+        if (len6 === 651 || len6 === 628) {
+          r.skip(29 * 4 * 2 + 29 + 1); r.u8r(); r.i32(); r.f64(); r.skip(32 * 4 * 2 + 1);
+          const alt = []; for (let i = 0; i < 32; i++) alt.push(r.u8r());
+          const cr = []; for (let i = 0; i < 32; i++) cr.push(r.u8r());
+          altShape = alt[0]; radius = cr[0];
+        }
+        r.skipSub();
+      }
+      out.push({ name, layer, net, comp, x, y, top: layer === 32 ? bot : top, shape: layer === 32 ? botShape : topShape, dir, hole, plated, altShape, radius });
+      void len5; void start5;
+    }
+    return out;
+  }
+  // tracks / arcs (silk and copper)
+  function readTracks(u8) {
+    const r = new Bin(u8), out = [];
+    while (r.left > 5) {
+      const type = r.u8r(); if (type !== 4) break;
+      r.sub(); const layer = r.u8r(); r.u8r(); r.u8r(); const net = r.u16(); r.u16(); const comp = r.u16(); r.skip(4);
+      const a = r.pos(), b = r.pos(), w = r.i32() * U; r.skipSub();
+      out.push({ layer, net, comp, pts: [a, b], w });
+    }
+    return out;
+  }
+  function readArcs(u8) {
+    const r = new Bin(u8), out = [];
+    while (r.left > 5) {
+      const type = r.u8r(); if (type !== 1) break;
+      r.sub(); const layer = r.u8r(); r.u8r(); r.u8r(); const net = r.u16(); r.u16(); const comp = r.u16(); r.skip(4);
+      const c = r.pos(), rad = r.i32() * U, sa = r.f64(), ea = r.f64(), w = r.i32() * U; r.skipSub();
+      // angles are counter-clockwise in Altium's Y-up frame; we already flipped Y, so walk clockwise in our frame
+      const pts = []; let span = ((ea - sa) % 360 + 360) % 360; if (span === 0) span = 360;
+      const n = Math.max(2, Math.ceil(span / 10));
+      for (let k = 0; k <= n; k++) { const t = (sa + span * k / n) * Math.PI / 180; pts.push([c[0] + rad * Math.cos(t), c[1] - rad * Math.sin(t)]); }
+      out.push({ layer, net, comp, pts, w });
+    }
+    return out;
+  }
+  function readVias(u8) {
+    const r = new Bin(u8), out = [];
+    while (r.left > 5) {
+      const type = r.u8r(); if (type !== 3) break;
+      r.sub(); r.skip(3); const net = r.u16(); r.skip(8); const p = r.pos(); const d = r.i32() * U; r.skipSub();
+      out.push({ x: p[0], y: p[1], d, net });
+    }
+    return out;
+  }
+
+  // component comment text (shown as the part value): Texts6 records flagged isComment
+  function readComments(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), out = {}; let p = 0;
+    while (p + 9 < u8.length && u8[p] === 5) {
+      p++; const l1 = dv.getUint32(p, true); p += 4; const s1 = p;
+      const comp = dv.getUint16(s1 + 7, true), isComment = u8[s1 + 40] !== 0; p = s1 + l1;
+      if (p + 4 > u8.length) break;
+      const l2 = dv.getUint32(p, true); p += 4; const s2 = p; const tl = u8[s2];
+      const txt = latin.decode(u8.subarray(s2 + 1, s2 + 1 + tl)); p = s2 + l2;
+      if (isComment && comp !== 0xFFFF && !(comp in out)) out[comp] = txt;
+    }
+    return out;
+  }
+  function padPolys(pd) {
+    const [w, h] = pd.top;
+    let local;
+    if (pd.altShape === 9 && pd.radius != null) local = G.rrect(w, h, Math.min(w, h) / 2 * pd.radius / 100);
+    else if (pd.shape === 1) local = Math.abs(w - h) < 1e-6 ? G.circ(0, 0, w / 2) : G.rrect(w, h, Math.min(w, h) / 2, 6);
+    else if (pd.shape === 3) { const c = Math.min(w, h) / 4, x = w / 2, y = h / 2; local = [[-x + c, -y], [x - c, -y], [x, -y + c], [x, y - c], [x - c, y], [-x + c, y], [-x, y - c], [-x, -y + c]]; }
+    else local = G.rect(w, h);
+    // direction is counter-clockwise in the Y-up frame → clockwise in ours
+    return [local.map(([x, y]) => { const q = G.rotM(x, y, -pd.dir); return [q[0] + pd.x, q[1] + pd.y]; })];
+  }
+
+  function parse(u8, fileName) {
+    const fs = cfb(u8);
+    const get = n => { const k = Object.keys(fs).find(p => p.toLowerCase() === n.toLowerCase()); return k ? fs[k]() : null; };
+    const compsRaw = get("Components6/Data"); if (!compsRaw) throw new Error("PcbDoc 里没有 Components6（可能是 PcbLib 或旧版本格式）");
+    const comps = propsRecords(compsRaw);
+    const nets = (get("Nets6/Data") ? propsRecords(get("Nets6/Data")) : []).map(o => o.NAME || "");
+    const pads = get("Pads6/Data") ? readPads(get("Pads6/Data")) : [];
+    const tracks = (get("Tracks6/Data") ? readTracks(get("Tracks6/Data")) : []).concat(get("Arcs6/Data") ? readArcs(get("Arcs6/Data")) : []);
+    const vias = get("Vias6/Data") ? readVias(get("Vias6/Data")) : [];
+    const b = G.newBoard(), edgePts = [];
+    // board outline from Board6 vertices
+    const board6 = get("Board6/Data") ? propsRecords(get("Board6/Data"))[0] || {} : {};
+    const outl = [];
+    for (let i = 0; board6["VX" + i] !== undefined; i++) {
+      const v = [unit(board6["VX" + i]), -unit(board6["VY" + i])];
+      if (+(board6["KIND" + i] || 0) !== 0 && outl.length) {
+        const c = [unit(board6["CX" + i]), -unit(board6["CY" + i])], rad = unit(board6["R" + i]), sa = +board6["SA" + i] || 0, ea = +board6["EA" + i] || 0;
+        let span = ((ea - sa) % 360 + 360) % 360; const n = Math.max(2, Math.ceil(span / 10));
+        const arc = []; for (let k = 0; k <= n; k++) { const t = (sa + span * k / n) * Math.PI / 180; arc.push([c[0] + rad * Math.cos(t), c[1] - rad * Math.sin(t)]); }
+        const prev = outl[outl.length - 1];
+        if (Math.hypot(arc[0][0] - prev[0], arc[0][1] - prev[1]) > Math.hypot(arc[arc.length - 1][0] - prev[0], arc[arc.length - 1][1] - prev[1])) arc.reverse();
+        outl.push(...arc);
+      }
+      outl.push(v);
+    }
+    if (outl.length > 2) { b.edges = G.polyD(outl); edgePts.push(...outl); }
+    const tr = { F: [], B: [] }, silk = { F: [], B: [] }, csilk = {};
+    for (const t of tracks) {
+      const d = G.lineD(t.pts);
+      if (t.layer === 1 || t.layer === 32) { if (t.comp === 0xFFFF) tr[t.layer === 1 ? "F" : "B"].push([t.w, d]); }
+      else if (t.layer === 33 || t.layer === 34) { if (t.comp !== 0xFFFF) (csilk[t.comp] ||= []).push(d); else silk[t.layer === 33 ? "F" : "B"].push(d); }
+    }
+    b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
+    b.silk = { F: silk.F.join(""), B: silk.B.join("") };
+    b.vias = vias.map(v => [G.f3(v.x), G.f3(v.y), G.f3(v.d / 2)]);
+    let comments = {}; try { const t6 = get("Texts6/Data"); if (t6) comments = readComments(t6); } catch (e) { /* value text is optional */ }
+    const padsByComp = {};
+    for (const pd of pads) (padsByComp[pd.comp] ||= []).push(pd);
+    comps.forEach((c, i) => {
+      const ref = c.SOURCEDESIGNATOR || c.DESIGNATOR || `?${i}`;
+      const side = /^BOTTOM/i.test(c.LAYER || "") ? "B" : "F";
+      const x = unit(c.X), y = -unit(c.Y);
+      const list = padsByComp[i] || [];
+      const recs = list.map(pd => {
+        const kind = pd.layer === 74 || pd.hole > 0 ? (pd.plated ? 1 : 2) : 0;
+        const holeD = pd.hole > 0 ? G.polyD(G.circ(pd.x, pd.y, pd.hole / 2, 20).reverse()) : "";
+        return G.padRec(pd.name, pd.net !== 0xFFFF ? nets[pd.net] || "" : "", padPolys(pd), kind, holeD);
+      });
+      let bb = G.bboxOf(recs.flatMap(q => [[q[7][0], q[7][1]], [q[7][2], q[7][3]]]));
+      if (!G.validBB(bb)) bb = [x - .5, y - .5, x + .5, y + .5];
+      const p1 = recs.find(q => q[0] === "1");
+      const props = { Description: c.SOURCEDESCRIPTION || "", LibRef: c.SOURCELIBREFERENCE || "" };
+      b.parts.push({ r: ref, s: side, c: [G.f3(x), G.f3(y)], rot: +c.ROTATION || 0, bb: bb.map(G.f3), pads: recs, body: "", silk: (csilk[i] || []).join(""),
+        val: comments[i] && !/^[.=]/.test(comments[i]) ? comments[i] : "", fp: c.PATTERN || "", props, sheet: "", p1: p1 ? [p1[4], p1[5]] : null, tht: recs.length && recs.every(q => q[3] !== 0) ? 1 : 0, dnp: 0, nobom: 0, libref: c.SOURCELIBREFERENCE || "" });
+    });
+    // free pads (test points, mounting holes) outside components
+    (padsByComp[0xFFFF] || []).filter(pd => Math.min(pd.top[0], pd.top[1]) >= 0.15 || pd.hole > 0).forEach((pd, k) => {
+      const kind = pd.layer === 74 || pd.hole > 0 ? (pd.plated ? 1 : 2) : 0;
+      const rec = G.padRec("1", pd.net !== 0xFFFF ? nets[pd.net] || "" : "", padPolys(pd), kind);
+      b.parts.push({ r: pd.name && /^[A-Za-z]+\d+$/.test(pd.name) ? pd.name : `PAD${k + 1}`, s: pd.layer === 32 ? "B" : "F", c: [rec[4], rec[5]], rot: 0, bb: rec[7].map(G.f3), pads: [rec], body: "", silk: "", val: "", fp: "PAD", props: {}, sheet: "", p1: null, tht: kind ? 1 : 0, dnp: 0, nobom: 1 });
+    });
+    return G.finishBoard(b, edgePts);
+  }
+  return { parse, cfb, propsRecords };
+})();
+
+// ===== core/project.js =====
+// Turns a pile of dropped files (folders, zips, mixed EDA outputs) into boards.
+globalThis.Project = (() => {
+  const SKIP = /(^|\/)(__MACOSX|\.history|\.git|node_modules|\.svn)(\/|$)|(^|\/)\._|(^|\/)~\$/;
+  const dirOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+  const baseOf = p => p.split("/").pop();
+  const stemOf = p => baseOf(p).replace(/\.[^.]+$/, "");
+  const ext = p => (baseOf(p).match(/\.([^.]+)$/) || ["", ""])[1].toLowerCase();
+  const isAncestor = (a, d) => a === "" || d === a || d.startsWith(a + "/");
+  const GERBER_EXT = /^(gbr|ger|gtl|gbl|gts|gbs|gtp|gbp|gto|gbo|gko|gm\d*|gml|gd\d*|g\d+|gp\d+|art|pho|gbx|cmp|sol|stc|sts|plc|pls|crc|crs|outline)$/;
+
+  async function expand(entries, depth = 0) {
+    const out = [];
+    for (const e of entries) {
+      if (SKIP.test(e.path)) continue;
+      const x = ext(e.path);
+      if (/^(zip|epro|epro2|tgz|tar|gz|odb)$/.test(x) && depth < 4) {
+        try { // decide by content, not by extension (KiCad writes zip data into ".tgz" files, for example)
+          let u8 = await e.read();
+          if (u8[0] === 0x1f && u8[1] === 0x8b) u8 = await Files.gunzip(u8);
+          const isTarData = u8.length > 262 && String.fromCharCode(...u8.subarray(257, 262)) === "ustar";
+          const list = (u8[0] === 0x50 && u8[1] === 0x4b) ? Files.unzip(u8) : isTarData ? Files.untar(u8) : null;
+          if (!list) { out.push(e); continue; }
+          const base = e.path.replace(/\.(zip|epro2?|tgz|tar\.gz|tar|gz|odb)$/i, "") + "/";
+          out.push(...await expand(list.map(z => ({ path: base + z.name, read: z.read, size: z.size, inArchive: e.path })), depth + 1));
+          continue;
+        } catch (err) { out.push({ path: e.path, read: e.read, error: "无法解压：" + err.message }); continue; }
+      }
+      out.push(e);
+    }
+    return out;
+  }
+
+  // read a small head of each file to decide what it is
+  async function classify(e) {
+    const x = ext(e.path), name = baseOf(e.path).toLowerCase();
+    if (e.error) return { kind: "error" };
+    if (x === "kicad_pcb") return { kind: "kicad" };
+    if (x === "pcbdoc") return { kind: "altium" };
+    if (x === "brd" || x === "mcm" || x === "sip") return { kind: "unsupported", why: "Cadence Allegro .brd 是加密的二进制格式，请导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356" };
+    if (x === "pcb" && /pads/i.test(name)) return { kind: "unsupported", why: "PADS 原文件请先导出 IPC-2581 或 ODB++" };
+    if (/^(xls|doc|docx|pdf|png|jpg|jpeg|webp|step|stp|wrl|dxf|dwg|kicad_sch|kicad_pro|kicad_prl|schdoc|prjpcb|dsn|olb|lib|bak|log|jrl)$/.test(x)) return { kind: "ignore" };
+    if (/(^|\/)(steps\/[^/]+\/|matrix\/matrix)/i.test(e.path)) return { kind: "odb" };
+    if (/(^|\/)(fonts|symbols|misc|wheels|ext)\/[^/]*$/i.test(e.path) && /\/(fonts|symbols|misc)\//i.test(e.path)) return { kind: "ignore" };
+    const size = e.size ?? 0;
+    if (size > 80e6) return { kind: "ignore" };
+    let u8;
+    try { u8 = await e.read(); } catch (err) { return { kind: "error", why: err.message }; }
+    if (x === "xlsx") return { kind: "xlsx", u8 };
+    const headBytes = u8.subarray(0, 8192);
+    const head = Files.decodeText(headBytes);
+    if (/^\s*\{"type":"DOCHEAD"/.test(head)) return { kind: "easyeda", text: () => Files.decodeText(u8) };
+    if (/<IPC-2581[\s>]/.test(head)) return { kind: "ipc2581", text: () => Files.decodeText(u8) };
+    if (/^\s*\(kicad_pcb/.test(head)) return { kind: "kicad", text: () => Files.decodeText(u8) };
+    if (x === "json" && /"lengthUnit"|FlyingProbe/i.test(head + name)) return { kind: "fly", text: () => Files.decodeText(u8) };
+    if (/^(P  |C  )/m.test(head) && /^(317|327)/m.test(Files.decodeText(u8.subarray(0, 200000)))) return { kind: "ipc356", text: () => Files.decodeText(u8) };
+    if (ImpGerber.isDrill(head) && !/%FS/.test(head)) return { kind: "drill", text: () => Files.decodeText(u8) };
+    if (ImpGerber.isGerber(head) && (GERBER_EXT.test(x) || /%FS/.test(head))) return { kind: "gerber", text: () => Files.decodeText(u8), role: ImpGerber.role(e.path, head) };
+    if (/^(csv|txt|tsv|pos|xy|mnt|place|plc|rep|lst)$/.test(x) || !x) return { kind: "table", text: () => Files.decodeText(u8) };
+    return { kind: "ignore" };
+  }
+
+  async function load(entries, onProgress = () => {}) {
+    const files = await expand(entries);
+    const errors = [], notes = [];
+    const C = [];
+    let i = 0;
+    for (const f of files) {
+      if (f.error) { errors.push(`${f.path}：${f.error}`); continue; }
+      if (++i % 20 === 0) onProgress(`正在识别文件 ${i}/${files.length}`);
+      const c = await classify(f);
+      c.path = f.path; c.dir = dirOf(f.path); c.entry = f;
+      if (c.kind === "unsupported") notes.push(`${f.path}：${c.why}`);
+      if (c.kind === "error") errors.push(`${f.path}：${c.why || "读取失败"}`);
+      C.push(c);
+    }
+    // tables → BOM / CPL
+    const tables = [];
+    for (const c of C.filter(c => c.kind === "table" || c.kind === "xlsx")) {
+      try {
+        let rows, text = "";
+        if (c.kind === "xlsx") rows = await Files.xlsx(c.u8); else { text = c.text(); rows = Files.csv(text); }
+        const cpl = Tables.cpl(text, rows);
+        if (cpl && cpl.rows.length >= 1) { tables.push({ type: "cpl", c, cpl }); const bom = Tables.bom(rows); if (bom) tables.push({ type: "bomFromCpl", c, bom }); continue; }
+        const bom = Tables.bom(rows); if (bom) tables.push({ type: "bom", c, bom });
+      } catch (err) { /* not a table we understand */ }
+    }
+    const boards = [];
+    const designDirs = [];
+    const add = (board, meta) => { boards.push({ board, ...meta }); };
+
+    // ---- native design files ----
+    for (const c of C.filter(c => c.kind === "kicad")) {
+      try { const t = c.text ? c.text() : Files.decodeText(await c.entry.read()); add(ImpKiCad.parse(t, baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: "KiCad PCB" }); designDirs.push(c.dir); }
+      catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    for (const c of C.filter(c => c.kind === "ipc2581")) {
+      try {
+        const t = c.text(); const b = ImpIPC2581.parse(t, baseOf(c.path));
+        const sw = (t.match(/<SoftwarePackage[^>]*name="([^"]+)"/) || [])[1] || "";
+        add(b, { path: c.path, name: stemOf(c.path).replace(/[_-]?ipc[_-]?2581$/i, "") || stemOf(c.path), source: "IPC-2581" + (sw ? `（${sw}）` : "") }); designDirs.push(c.dir);
+      } catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    for (const c of C.filter(c => c.kind === "altium")) {
+      try { add(ImpAltium.parse(await c.entry.read(), baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: "Altium PcbDoc" }); designDirs.push(c.dir); }
+      catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    // EasyEDA: group docs by archive / directory
+    const ee = {};
+    for (const c of C.filter(c => c.kind === "easyeda")) (ee[c.entry.inArchive || c.dir] ||= []).push(c);
+    for (const [grp, list] of Object.entries(ee)) {
+      try {
+        const res = ImpEasyEDA.parseProject(list.map(c => c.text()));
+        for (const r of res) {
+          if (!r.board.parts.length) continue;
+          const nameBase = stemOf(list.find(c => /\.(epru|epcb)$/i.test(c.path))?.path || grp || "easyeda");
+          if (r.board.parts.every(p => !p.pads.length)) notes.push(`${grp || nameBase}：只有 PCB 文档，缺少封装数据。请在嘉立创EDA里用“文件 → 导出 → 工程（.epro）”导出完整工程再拖进来。`);
+          add(r.board, { path: grp + "#" + (r.uuid || ""), name: res.length > 1 ? `${nameBase}-${r.title || r.uuid}` : nameBase, source: "嘉立创EDA专业版" });
+        }
+        designDirs.push(dirOf(list[0].path));
+      } catch (err) { errors.push(`${grp}：${err.message}`); }
+    }
+    // ODB++
+    if (globalThis.ImpODB) {
+      const roots = {};
+      for (const c of C.filter(c => c.kind === "odb")) { const m = c.path.match(/^(.*?)(?:^|\/)(?:steps\/|matrix\/matrix)/i); if (m) (roots[m[1].replace(/\/$/, "")] ||= []).push(c); }
+      for (const [root, list] of Object.entries(roots)) {
+        if (!list.some(c => /eda\/data(\.z)?$/i.test(c.path))) continue;
+        try { const b = await ImpODB.parse(list.map(c => ({ path: root ? c.path.slice(root.length + 1) : c.path, read: c.entry.read }))); add(b, { path: root, name: baseOf(root.replace(/\/odb$/i, "")) || "odb", source: "ODB++" }); designDirs.push(dirOf(root)); }
+        catch (err) { errors.push(`${root}：${err.message}`); }
+      }
+    }
+
+    // ---- manufacturing groups (Gerber / CPL / netlist) ----
+    const covered = d => designDirs.some(dd => isAncestor(dd, d) && d.split("/").length - dd.split("/").length <= 2);
+    const near = (d, list) => { // same dir, then ancestors, then siblings
+      const same = list.filter(t => t.c.dir === d); if (same.length) return same;
+      for (let a = d; a !== ""; a = dirOf(a)) { const up = list.filter(t => t.c.dir === dirOf(a)); if (up.length) return up; }
+      const sib = list.filter(t => dirOf(t.c.dir) === dirOf(d)); return sib;
+    };
+    const gerbers = C.filter(c => c.kind === "gerber"), drills = C.filter(c => c.kind === "drill");
+    const nets = C.filter(c => c.kind === "ipc356" || c.kind === "fly");
+    const gdirs = [...new Set(gerbers.map(c => c.dir))];
+    const usedTables = new Set();
+    for (const d of gdirs) {
+      if (covered(d)) continue;
+      const gl = gerbers.filter(c => c.dir === d);
+      const layers = {};
+      for (const c of gl) { if (!c.role || c.role === "other" || c.role === "cuIn") continue; if (c.role === "drill") continue; if (!layers[c.role]) { try { layers[c.role] = ImpGerber.parse(c.text()); } catch (err) { errors.push(`${c.path}：${err.message}`); } } }
+      if (!layers.cuF && !layers.cuB) continue;
+      const holes = [];
+      for (const c of drills.filter(c => c.dir === d || isAncestor(d, c.dir))) { try { const pl = /npth|non.?plated/i.test(c.path) ? false : /pth|plated/i.test(c.path) ? true : null; holes.push(...ImpGerber.drill(c.text()).map(h => ({ ...h, plated: h.plated ?? pl ?? true }))); } catch (err) { /* ignore */ } }
+      for (const c of gl.filter(c => c.role === "drill")) { try { holes.push(...ImpGerber.drill(c.text())); } catch (e) {} }
+      const nt = near(d, nets.map(c => ({ c })));
+      let net = null;
+      for (const t of nt) { try { if (t.c.kind === "fly") { const f = Tables.flyprobe(t.c.text()); if (f) { net = { pads: f.pads, comps: f.comps, source: "飞针测试文件" }; break; } } else { const p = Tables.ipc356(t.c.text()); if (p) { net = { pads: p, source: "IPC-356" }; break; } } } catch (e) {} }
+      const cpls = near(d, tables.filter(t => t.type === "cpl"));
+      const cpl = cpls.length ? cpls[0].cpl : null;
+      cpls.forEach(t => usedTables.add(t));
+      const bomNear = near(d, tables.filter(t => t.type === "bom"));
+      const b = ImpFab.build({ layers, holes, cpl, net, bom: bomNear.length ? bomNear[0].bom : null });
+      if (!b.parts.length) { notes.push(`${d || "根目录"}：找到 Gerber，但没有坐标文件或网表，无法确定器件。请一起拖入坐标文件（Pick and Place / CPL）。`); continue; }
+      const nm = baseOf(d) || stemOf(gl[0].path);
+      const parts = ["Gerber"]; if (cpl) parts.push("坐标文件"); if (net) parts.push(net.source);
+      add(b, { path: d + "#fab", name: nm.replace(/^gerber[_-]?/i, "") || nm, source: parts.join(" + ") });
+    }
+    // CPL with no Gerber next to it: placement-only board
+    for (const t of tables.filter(t => t.type === "cpl" && !usedTables.has(t))) {
+      if (covered(t.c.dir) || gdirs.some(d => isAncestor(t.c.dir, d) || isAncestor(d, t.c.dir))) continue;
+      const nt = near(t.c.dir, nets.map(c => ({ c })));
+      let net = null; for (const n of nt) { try { net = n.c.kind === "fly" ? (x => x && { pads: x.pads, comps: x.comps })(Tables.flyprobe(n.c.text())) : { pads: Tables.ipc356(n.c.text()) }; if (net && net.pads) break; } catch (e) {} }
+      const b = ImpFab.build({ layers: {}, holes: [], cpl: t.cpl, net });
+      b.warn.unshift("只有坐标文件，没有 Gerber：器件按坐标画成方框");
+      add(b, { path: t.c.path, name: stemOf(t.c.path), source: "坐标文件" + (net ? " + 网表" : "") });
+    }
+
+    // ---- drop duplicates: the same design as Gerber next to its source file, or the same Gerbers twice (folder + zip) ----
+    const sig = b => { const B = b.board; return { refs: new Set(B.parts.map(p => p.r)), pos: Object.fromEntries(B.parts.map(p => [p.r, p.c])), w: B.bbox[2] - B.bbox[0], h: B.bbox[3] - B.bbox[1] }; };
+    // same board = most shared designators sit at the same place (after allowing for a different origin)
+    const samePlacement = (s, t, common) => {
+      const dx = common.map(r => t.pos[r][0] - s.pos[r][0]).sort((a, b) => a - b), dy = common.map(r => t.pos[r][1] - s.pos[r][1]).sort((a, b) => a - b);
+      const ox = dx[dx.length >> 1], oy = dy[dy.length >> 1];
+      const hit = common.filter(r => Math.hypot(t.pos[r][0] - s.pos[r][0] - ox, t.pos[r][1] - s.pos[r][1] - oy) < 0.6).length;
+      return hit >= 0.7 * common.length;
+    };
+    const rank = b => b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2;
+    const keep = [];
+    for (const b of boards.slice().sort((x, y) => rank(y) - rank(x))) {
+      const s = sig(b);
+      const dup = keep.find(k => { const t = sig(k); const common = [...s.refs].filter(r => t.refs.has(r)); return common.length >= 0.7 * Math.min(s.refs.size, t.refs.size) && Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2 && samePlacement(s, t, common); });
+      if (dup) { if (rank(b) < 2 && rank(dup) === 2) notes.push(`${b.path.replace(/#.*$/, "")}：和原生设计文件 ${baseOf(dup.path.replace(/#.*$/, ""))} 是同一块板，已使用原生文件`); continue; }
+      keep.push(b);
+    }
+    boards.length = 0; boards.push(...keep.sort((x, y) => x.path.localeCompare(y.path)));
+
+    // ---- attach BOMs ----
+    const boms = tables.filter(t => t.type === "bom");
+    for (const bd of boards) {
+      const d = dirOf(bd.path.replace(/#.*$/, "")) || bd.path.replace(/#.*$/, "");
+      const dd = bd.path.includes("#fab") ? bd.path.replace(/#fab$/, "") : dirOf(bd.path);
+      let cands = near(dd, boms);
+      if (!cands.length) cands = boms.filter(t => isAncestor(t.c.dir, dd));
+      const stem = (bd.name || "").toLowerCase();
+      cands.sort((a, b) => (baseOf(b.c.path).toLowerCase().includes(stem) - baseOf(a.c.path).toLowerCase().includes(stem)));
+      const refs = new Set(bd.board.parts.map(p => p.r));
+      const pick = cands.find(t => Object.keys(t.bom).filter(r => refs.has(r)).length >= Math.min(3, refs.size)) || null;
+      bd.bom = pick ? pick.bom : null; bd.bomFile = pick ? baseOf(pick.c.path) : "";
+      if (!pick) { const fromCpl = tables.find(t => t.type === "bomFromCpl" && (t.c.dir === dd || isAncestor(dd, t.c.dir))); if (fromCpl) { bd.bom = fromCpl.bom; bd.bomFile = baseOf(fromCpl.c.path); } }
+    }
+    if (!boards.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子文件。支持：KiCad .kicad_pcb、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
+    return { boards, errors, notes };
+  }
+  return { load, expand, classify };
+})();
+
+// ===== enrich.js =====
+// Turns a parsed board into a soldering plan: names, polarity, solder steps, groups.
+globalThis.Enrich = (() => {
   const STEPS = {
     1: ["细间距芯片 / 连接器", "QFN、DFN、LGA、BGA、QFP、TSSOP、FPC/Type-C 座。先焊，周围空旷好操作。锡膏 + 热风枪或加热台，认准 1 脚。"],
     2: ["三极管 / MOS / 晶振 / SOIC", "SOT、SOIC、SOP、晶振、功率封装。认准 1 脚；4 脚晶振转 90° 会把晶体脚接到地。"],
@@ -529,8 +2345,8 @@ const Enrich = (() => {
   const FINE = /QFN|DFN|LGA|BGA|WSON|VSON|USON|XSON|TSON|(^|[^A-Z])SON|QFP|TSSOP|MSOP|SSOP|CSP|LQFN|VQFN|FH\d|FPC|FFC|USB[_-]?C|Type-?C|P0\.[345]\d*mm/i;
   const MID = /SOT|SOIC|(^|_)SOP|ESOP|HSOP|SC-?70|SC-?88|Crystal|Oscillator|TO-2|DPAK|D2PAK|PowerPAK|SMA|SMB|SMC|MELF/i;
   const pkg = fp => (fp.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1] || "";
-  const isTP = p => /^TP\d/i.test(p.r) || /TestPoint/i.test(p.fp);
-  const nothing = p => p.r.startsWith("#") || /Fiducial|MountingHole|Logo|NetTie/i.test(p.fp) || !p.pads.some(q => q[3] !== 2);
+  const isTP = p => /^TP\d/i.test(p.r) || /TestPoint|TESTPOINT/i.test(p.fp) || (p.fp === "PAD" && p.pads.length <= 1);
+  const nothing = p => p.r.startsWith("#") || /^\?/.test(p.r) || /Fiducial|MountingHole|Logo|NetTie|^MTG|^MH\d/i.test(p.fp) || /^(FID|MARK|MH|H)\d+$/i.test(p.r) && p.pads.length <= 1 || (!p.pads.some(q => q[3] !== 2) && !p.nopin);
   const lcscOf = p => p.props.LCSC || p.props["LCSC Part"] || p.props["LCSC Part #"] || p.props["JLCPCB Part #"] || p.props.lcsc_id || p.props["LCSC#"] || "";
   function prettyFp(fp) {
     let m = fp.match(/Pin(Header|Socket)_(\d+)x(\d+)_P([\d.]+)mm_(\w+)/);
@@ -602,6 +2418,7 @@ const Enrich = (() => {
     const groups = new Map(), dnp = [];
     for (const p of board.parts) {
       const b = bomMap && bomMap[p.r];
+      if (!p.fp && b && b.fp) p.fp = b.fp; // pick-and-place files often lack the footprint; the BOM has it
       const mpn = (b && b.mpn) || mpnOf(p), lcsc = (b && b.lcsc) || lcscOf(p);
       let nm = (b && b.comment) || (p.val && p.val !== "~" ? p.val : "") || mpn || prettyFp(p.fp);
       if (p.val && mpn && !(b && b.comment) && !nm.includes(mpn) && /^(U|IC|Q|D|Y|X)/.test(p.r)) nm = p.val === "~" ? mpn : `${p.val}`;
@@ -609,6 +2426,7 @@ const Enrich = (() => {
       const m = nm.match(/[（(]([^()（）]*?(需|缺货|确认|DNP|不贴|注意|自供|代购)[^()（）]*)[)）]/);
       if (m) { note = m[1]; nm = nm.replace(m[0], "").trim() || nm; }
       p.nm = nm; p.lcsc = lcsc; p.mpn = mpn; p.note = note;
+      if (b && b.dnp) p.dnp = 1;
       p.tp = isTP(p) ? 1 : 0;
       p.skip = (p.tp || p.nobom || nothing(p)) ? 1 : 0;
       p.pol = p.skip ? "" : polarity(p, nm);
@@ -631,16 +2449,16 @@ const Enrich = (() => {
   }
   return { enrich, STEPS, natcmp };
 })();
-/*ENRICH-END*/
 
+// ===== app.js =====
 // ======================= app =======================
 const NS = "http://www.w3.org/2000/svg";
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const LS = {
-  get(k, d) { try { const v = localStorage.getItem("ksn:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem("ksn:" + k, JSON.stringify(v)); } catch (e) {} },
+  get(k, d) { try { const v = localStorage.getItem("psn:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("psn:" + k, JSON.stringify(v)); } catch (e) {} },
 };
 let toastT;
 function toast(msg, ms = 3200) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
@@ -651,7 +2469,7 @@ const DB = {
   async open() {
     if (this.db) return this.db;
     return this.db = await new Promise((res, rej) => {
-      try { const r = indexedDB.open("kicad-solder-nav", 1); r.onupgradeneeded = () => r.result.createObjectStore("boards", { keyPath: "key" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+      try { const r = indexedDB.open("pcb-solder-nav", 1); r.onupgradeneeded = () => r.result.createObjectStore("boards", { keyPath: "key" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
       catch (e) { rej(e); }
     });
   },
@@ -667,7 +2485,6 @@ const doneOf = () => (doneAll[S.b.key] ||= {});
 const saveDone = () => LS.set("done", doneAll);
 
 // ---------- loading files ----------
-const SKIP_PATH = /(^|\/)(__MACOSX|\.history|\.git|node_modules)(\/|$)|(^|\/)\._/;
 async function readEntries(dirEntry, prefix) {
   const out = [], reader = dirEntry.createReader();
   for (;;) {
@@ -679,74 +2496,40 @@ async function readEntries(dirEntry, prefix) {
 }
 async function walkEntry(e, prefix = "") {
   const path = prefix + e.name;
-  if (SKIP_PATH.test(path)) return [];
-  if (e.isFile) { const f = await new Promise((res, rej) => e.file(res, rej)); return [{ path, file: f }]; }
+  if (/(^|\/)(__MACOSX|\.git|node_modules|\.history)$/.test(path)) return [];
+  if (e.isFile) { const f = await new Promise((res, rej) => e.file(res, rej)); return [fileEntry(f, path)]; }
   if (e.isDirectory) return readEntries(e, path + "/");
   return [];
 }
-async function expandZips(list) {
-  const out = [];
-  for (const it of list) {
-    if (/\.zip$/i.test(it.path)) {
-      if (!window.JSZip) { toast("zip 需要联网加载解压库，当前不可用。请先解压后拖文件夹。"); continue; }
-      try {
-        const zip = await JSZip.loadAsync(it.file);
-        const base = it.path.replace(/\.zip$/i, "") + "/";
-        for (const name of Object.keys(zip.files)) {
-          const z = zip.files[name]; if (z.dir || SKIP_PATH.test(name)) continue;
-          if (/\.(kicad_pcb|csv)$/i.test(name)) out.push({ path: base + name, text: () => z.async("string") });
-          else if (/\.zip$/i.test(name) && !/gerber/i.test(name)) out.push(...await expandZips([{ path: base + name, file: await z.async("blob") }]));
-        }
-      } catch (e) { toast(`${it.path} 解压失败：${e.message}`); }
-    } else out.push({ path: it.path, text: () => it.file.text() });
-  }
-  return out;
-}
-const dirOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-const baseOf = p => p.split("/").pop();
+const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
+const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
-  const items = await expandZips(list.filter(x => !SKIP_PATH.test(x.path)));
-  const pcbs = items.filter(x => /\.kicad_pcb$/i.test(x.path)), csvs = items.filter(x => /\.csv$/i.test(x.path));
-  if (!pcbs.length) { toast("没有找到 .kicad_pcb 文件。请拖入 KiCad 工程文件夹、PCB 文件或包含它们的 zip。"); return; }
-  $("#loadMsg").textContent = `正在解析 ${pcbs.length} 块板…`;
-  const csvCache = {};
-  const bomFor = async pcb => {
-    const dir = dirOf(pcb.path), stem = baseOf(pcb.path).replace(/\.kicad_pcb$/i, "").toLowerCase();
-    let near = csvs.filter(c => dirOf(c.path) === dir);
-    const named = near.filter(c => baseOf(c.path).toLowerCase().includes(stem));
-    if (named.length) near = named;
-    near = near.sort((a, b) => (/bom/i.test(baseOf(b.path)) - /bom/i.test(baseOf(a.path))) || (baseOf(b.path).toLowerCase().includes(stem) - baseOf(a.path).toLowerCase().includes(stem)));
-    // loose single-csv uploads (no folder) also count
-    const pool = near.length ? near : csvs.filter(c => !c.path.includes("/"));
-    for (const c of pool) {
-      if (!(c.path in csvCache)) { try { csvCache[c.path] = KiPCB.bom(await c.text()); } catch (e) { csvCache[c.path] = null; } }
-      if (csvCache[c.path]) return { map: csvCache[c.path], name: baseOf(c.path) };
-    }
-    return null;
-  };
-  let added = 0; const errs = [];
-  for (const pcb of pcbs) {
-    try {
-      const text = await pcb.text();
-      const b = KiPCB.parse(text, baseOf(pcb.path));
-      const bm = await bomFor(pcb);
-      Enrich.enrich(b, bm && bm.map);
-      b.bomFile = bm ? bm.name : "";
-      const folder = dirOf(pcb.path).split("/").pop();
-      b.name = baseOf(pcb.path).replace(/\.kicad_pcb$/i, "");
-      b.sub = b.title || folder || "";
-      b.key = (dirOf(pcb.path) + "/" + b.name) + "#" + text.length;
-      b.added = Date.now();
-      const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.sub === b.sub));
-      if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
-      DB.put(b); added++;
-    } catch (e) { errs.push(`${pcb.path}：${e.message}`); }
-  }
+  if (!list.length) return;
+  $("#loadMsg").textContent = `正在读取 ${list.length} 个文件…`;
+  toast(`正在读取 ${list.length} 个文件…`, 60000);
+  let res;
+  try { res = await Project.load(list, msg => { $("#loadMsg").textContent = msg; }); }
+  catch (e) { toast("读取失败：" + e.message, 6000); $("#loadMsg").textContent = ""; return; }
   $("#loadMsg").textContent = "";
-  if (errs.length) toast("有文件没读成：\n" + errs.join("\n"), 6000);
-  if (added) { toast(`读入 ${added} 块板`); showApp(); openBoard(S.boards[S.boards.length - added].key); }
+  let firstKey = null;
+  for (const m of res.boards) {
+    const b = m.board;
+    Enrich.enrich(b, m.bom);
+    Object.assign(b, { name: m.name, sub: m.source, source: m.source, bomFile: m.bomFile || "", file: m.path.replace(/#.*$/, "").split("/").pop(), added: Date.now(), warn: b.warn || [] });
+    b.key = boardKey(m, b);
+    const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source));
+    if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
+    DB.put(b); firstKey ||= b.key;
+  }
+  const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
+  showNotes(msgs);
+  if (firstKey) { toast(`读入 ${res.boards.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
 }
-function filesToList(files) { return [...files].map(f => ({ path: f.webkitRelativePath || f.name, file: f })); }
+function showNotes(msgs) {
+  for (const id of ["#notes", "#notesEmpty"]) { const n = $(id); if (!n) continue; n.hidden = !msgs.length; n.innerHTML = msgs.length ? `<b>导入说明</b><ul>${msgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : ""; }
+}
+function filesToList(files) { return [...files].map(f => fileEntry(f)); }
 $("#inDir").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
 $("#inFiles").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
 $("#pickDir").onclick = () => $("#inDir").click();
@@ -833,8 +2616,8 @@ const DEMO = `(kicad_pcb (version 20240108) (generator "demo")
  (via (at 111 112) (size 0.6) (drill 0.3) (net "GND"))
 )`;
 $("#loadDemo").onclick = () => {
-  const b = KiPCB.parse(DEMO, "demo.kicad_pcb"); Enrich.enrich(b, null);
-  Object.assign(b, { name: "demo", sub: "示例板", key: "demo#builtin", bomFile: "", added: Date.now() });
+  const b = ImpKiCad.parse(DEMO, "demo.kicad_pcb"); Enrich.enrich(b, null);
+  Object.assign(b, { name: "demo", sub: "示例板", source: "KiCad PCB（内置示例）", file: "demo.kicad_pcb", key: "demo#builtin", bomFile: "", added: Date.now(), warn: [] });
   const i = S.boards.findIndex(x => x.key === b.key); if (i >= 0) S.boards[i] = b; else S.boards.push(b);
   DB.put(b); showApp(); openBoard(b.key);
 };
@@ -858,7 +2641,8 @@ function dirWord(dx, dy) {
 }
 function orientText(p) {
   if (p.pol === "none-bi") return "双向 TVS，无极性，两个方向都行";
-  if (!p.pol || !p.p1) return "无极性";
+  if (p.pol && !p.p1) return `有极性，但这份数据没有引脚编号：方向请对照板上丝印${p.rot ? `（坐标文件角度 ${p.rot}°）` : ""}`;
+  if (!p.pol) return "无极性";
   const v = view().vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
   const where = `（当前${S.side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
   if (p.pol === "k1") return `阴极 K 在${w}侧：器件色带/横线朝${w}${where}`;
@@ -1103,7 +2887,8 @@ function renderList() {
   for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 9) tht += g.refs.length; if (g.step === 8) bot += g.refs.length; }
   $("#nums").innerHTML = `<span><b>${b.groups.length}</b> 种</span><span><b>${total - tht}</b> 贴片</span><span><b>${tht}</b> 插件</span>${bot ? `<span>底面 <b>${bot}</b></span>` : ""}${b.dnp.length ? `<span>DNP <b>${b.dnp.length}</b></span>` : ""}<span>已焊 <b>${nd}</b> / ${total}</span>`;
   $("#bar").style.width = (total ? nd / total * 100 : 0) + "%";
-  $("#src").textContent = `${b.file}${b.bomFile ? " + " + b.bomFile : "（没有找到 BOM CSV，名称取自 PCB 里的 Value）"}`;
+  $("#src").textContent = `${b.source || ""} · ${b.file || ""}${b.bomFile ? " + BOM " + b.bomFile : "（没有找到 BOM，名称取自设计文件里的值）"}`;
+  const w = $("#warn"); w.hidden = !(b.warn && b.warn.length); w.innerHTML = (b.warn || []).map(x => `<div>⚠ ${esc(x)}</div>`).join("");
   const match = g => !q || g.refs.some(r => r.toUpperCase().includes(q)) || g.nm.toUpperCase().includes(q) || (g.lcsc || "").toUpperCase() === q;
   const anyHit = !q || b.groups.some(match);
   let idx = 0;
@@ -1142,6 +2927,7 @@ function renderList() {
 }
 function renderTps() {
   const tps = S.b.parts.filter(p => p.tp).sort((a, b) => Enrich.natcmp(a.r, b.r));
+  if (S.b.noNets) { $("#tps").innerHTML = '<span class="note" style="grid-column:auto">这份数据没有网络信息（只有 Gerber + 坐标文件），没法查引脚连接。把 IPC-356 网表（嘉立创 Gerber 包里的 FlyingProbeTesting.json 也行）一起拖进来即可。</span>'; return; }
   $("#tps").innerHTML = tps.length ? tps.map(p => `<button type="button" data-r="${esc(p.r)}">${esc(p.r)} <span>${esc(p.pads[0]?.[1] || "未连接")}</span></button>`).join("") : '<span class="hint">这块板没有测试点</span>';
   $("#tps").querySelectorAll("button").forEach(b => b.onclick = () => pickPad(b.dataset.r, 0, true));
 }
@@ -1236,6 +3022,6 @@ window.addEventListener("resize", () => { if (S.b) setVB(S.vb); });
     $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的 KiCad 工程。", 5000);
   }
 })();
-</script>
 
+</script>
 </html>
