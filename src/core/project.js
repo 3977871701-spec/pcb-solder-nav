@@ -214,13 +214,14 @@ globalThis.Project = (() => {
       return hit >= 0.7 * common.length;
     };
     const rank = b => (b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2) - (/(^|\/)(work|tmp|temp|backup|old|review|snapshots?|sim)(\/|#|$)/i.test(b.path) ? 0.5 : 0);
-    const keep = [];
+    const keep = [], merged = {};
     for (const b of boards.slice().sort((x, y) => rank(y) - rank(x))) {
       const s = sig(b);
       const dup = keep.find(k => { const t = sig(k); const common = [...s.refs].filter(r => t.refs.has(r)); return common.length >= 0.7 * Math.min(s.refs.size, t.refs.size) && Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2 && samePlacement(s, t, common); });
-      if (dup) { if (rank(b) < 2 && rank(dup) === 2) notes.push(`${b.path.replace(/#.*$/, "")}：和原生设计文件 ${baseOf(dup.path.replace(/#.*$/, ""))} 是同一块板，已使用原生文件`); continue; }
+      if (dup) { if (rank(b) < 2 && rank(dup) === 2) (merged[baseOf(dup.path.replace(/#.*$/, ""))] ||= []).push(b.path.replace(/#.*$/, "")); continue; }
       keep.push(b);
     }
+    for (const [src, list] of Object.entries(merged)) notes.push(`另有 ${list.length} 份 Gerber 和设计文件 ${src} 是同一块板（例如 ${list[0]}），已直接使用设计文件`);
     // exact copies (same placement) collapse silently; different revisions with the same name get their folder appended
     const exact = new Set(), uniq = [];
     for (const b of keep) { const k = b.board.parts.map(p => p.r + ":" + p.c.join(",")).sort().join("|"); if (exact.has(k)) continue; exact.add(k); uniq.push(b); }

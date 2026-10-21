@@ -293,6 +293,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <button type="button" class="tbtn" id="copyBom">复制分步 BOM</button>
         <button type="button" class="tbtn" id="resetProg">清空进度</button>
         <button type="button" class="tbtn" id="rmBoard">移除这块板</button>
+        <button type="button" class="tbtn" id="rmAll">清空全部板子</button>
       </div>
     </div>
     <section class="step" id="tpSec" hidden>
@@ -367,6 +368,7 @@ globalThis.Geom = (() => {
   function padRec(num, net, polys, kind, holeD = "") {
     const all = polys.flat(); const bb = bboxOf(all);
     const d = polys.map(polyD).join("") + holeD;
+    if (net && /^Unused_[0-9A-F]+$/i.test(net)) net = ""; // Allegro names every unconnected pin "Unused_…"
     return [String(num ?? ""), net || "", d, kind, f3((bb[0] + bb[2]) / 2), f3((bb[1] + bb[3]) / 2), f3(Math.min(bb[2] - bb[0], bb[3] - bb[1])), bb];
   }
   // empty board skeleton every importer fills in
@@ -1778,16 +1780,63 @@ globalThis.ImpFab = (() => {
       const maxR = c => {
         const f = (c.fp || (inp.bom && inp.bom[c.ref] && inp.bom[c.ref].fp) || "");
         const k = (f.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1];
-        if (k) return R0[k];
+        // imperial size codes only mean chip size for R/C/D/LED or a plain "L0402"-style name — "MWSA0402" is a 4×4 mm power inductor
+        const chipLike = /^(R|C|FB|D|LED|RN)\d/i.test(c.ref) || /^(L|IND)?_?(01005|0201|0402|0603|0805|1206)(_|$)/i.test(f.trim());
+        if (k && chipLike) return R0[k];
         if (/SOD-?(323|523|923)|SC-?79/i.test(f)) return 1.6; if (/SOD-?123/i.test(f)) return 2.2; if (/SOT-?(23|323|523|363|353|563)|SC-?70|SC-?88/i.test(f)) return 1.8;
-        if (/^(R|C|L|FB)\d/i.test(c.ref)) return 2.2;
+        if (/^(R|C|FB)\d/i.test(c.ref)) return 2.2;
+        if (/^L\d/i.test(c.ref)) return 3.5;
         return 15;
       };
       const sz = p => { const bb = G.bboxOf(p.polys.flat()); return [bb[2] - bb[0], bb[3] - bb[1]]; };
       const sameSize = (a, b) => { const x = sz(a), y = sz(b); return Math.abs(Math.min(...x) - Math.min(...y)) < 0.03 && Math.abs(Math.max(...x) - Math.max(...y)) < 0.03; };
       const okSide = (p, c) => p.side === "T" || c.side === p.side;
       const left = [];
+      // through-hole rows (pin headers, encoders…): link plated holes of equal size up to one 2.54 mm pitch apart and give
+      // each linked group to the part whose placement point lies on it (THT footprints are often anchored at pin 1)
+      const thtPads = pads.filter(p => p.hole > 0), claimed = new Set();
+      if (thtPads.length) {
+        const tg = grid(thtPads, 3), parent = new Map(thtPads.map(p => [p, p]));
+        const find = p => { while (parent.get(p) !== p) { parent.set(p, parent.get(parent.get(p))); p = parent.get(p); } return p; };
+        for (const p of thtPads) for (const q of tg.near(p.x, p.y, 2.6)) if (q !== p && Math.abs(q.hole - p.hole) < 0.05) parent.set(find(p), find(q));
+        const groupsT = new Map(); for (const p of thtPads) { const r = find(p); if (!groupsT.has(r)) groupsT.set(r, []); groupsT.get(r).push(p); }
+        for (const grp of groupsT.values()) {
+          const owners = [...comps.values()].filter(c => grp.some(p => Math.hypot(p.x - c.x, p.y - c.y) < 0.3)); // a part anchored on one of the holes
+          if (owners.length === 1) { owners[0].pads.push(...grp); grp.forEach(p => claimed.add(p)); continue; }
+          if (owners.length > 1) {
+            // several headers butted end to end. Order the holes along the row; parts anchored at pin 1 own the run from their
+            // anchor up to the next anchor (or down to the previous one) — pick whichever reading leaves fewer holes unowned
+            // the linked holes may form several parallel rows: split into rows in the direction where most anchors sit on a row
+            const rowsOf = alongX => { const m = new Map(); for (const p of grp) { const k = Math.round((alongX ? p.y : p.x) / 0.1); if (!m.has(k)) m.set(k, []); m.get(k).push(p); } return m; };
+            const onRow = (alongX, row) => owners.filter(c => row.some(p => Math.hypot(p.x - c.x, p.y - c.y) < 0.3));
+            let alongX = true, best = -1;
+            for (const ax of [true, false]) { let sc = 0; for (const row of rowsOf(ax).values()) if (onRow(ax, row).length) sc += row.length; if (sc > best) { best = sc; alongX = ax; } }
+            const owner = new Map();
+            for (const row of rowsOf(alongX).values()) {
+              const t = p => alongX ? p.x : p.y;
+              const anchors = onRow(alongX, row).map(c => ({ c, t: alongX ? c.x : c.y })).sort((a, b) => a.t - b.t);
+              if (!anchors.length) continue;
+              const assign = dir => row.map(p => { const v = t(p) + 1e-6 * dir; const a = dir > 0 ? anchors.filter(a => a.t <= v).pop() : anchors.find(a => a.t >= v); return a ? a.c : null; });
+              const fwd = assign(1), back = assign(-1);
+              const pick = fwd.filter(x => !x).length <= back.filter(x => !x).length ? fwd : back;
+              row.forEach((p, i) => { if (pick[i]) owner.set(p, pick[i]); });
+            }
+            // rows without an anchor (second row of a 2×N header): follow the nearest already-owned hole
+            for (let pass = 0; pass < 4; pass++) for (const p of grp) {
+              if (owner.has(p)) continue;
+              let b = null, bd = 2.7; for (const q of grp) { const o = owner.get(q); if (!o) continue; const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < bd) { bd = d; b = o; } }
+              if (b) owner.set(p, b);
+            }
+            for (const p of grp) {
+              let b = owner.get(p);
+              if (!b) { let bd = 1e9; for (const c of owners) { const d = Math.hypot(p.x - c.x, p.y - c.y); if (d < bd) { bd = d; b = c; } } }
+              b.pads.push(p); claimed.add(p);
+            }
+          }
+        }
+      }
       for (const p of pads) {
+        if (claimed.has(p)) continue;
         let best = null, bd = 1e9;
         for (const c of cg.near(p.x, p.y, 15)) {
           if (!okSide(p, c)) continue;
@@ -1799,13 +1848,31 @@ globalThis.ImpFab = (() => {
         }
         if (best) best.pads.push(p); else left.push(p);
       }
+      // a symmetric "twin" can be a coincidence (e.g. a neighbouring connector's staggered rows): pads clearly farther
+      // out than the rest of a part's pads (a jump in the distance profile) are released and reassigned below
+      for (const c of comps.values()) {
+        if (c.pads.length < 4) continue;
+        const ds = c.pads.filter(p => !claimed.has(p)).map(p => [Math.hypot(p.x - c.x, p.y - c.y), p]).sort((a, b) => a[0] - b[0]);
+        for (let i = 1; i < ds.length; i++) {
+          const gap = ds[i][0] - ds[i - 1][0];
+          if (gap > Math.max(0.6, 0.15 * ds[i - 1][0]) && ds.length - i <= 0.4 * ds.length) {
+            const out = new Set(ds.slice(i).map(x => x[1]));
+            c.pads = c.pads.filter(p => !out.has(p)); left.push(...out);
+            break;
+          }
+        }
+      }
+      // freeze each part's pad extent before the fallback, otherwise one stray pad grows the box and drags neighbours in
+      const core = new Map([...comps.values()].map(c => [c, c.pads.length ? { bb: G.bboxOf(c.pads.map(q => [q.x, q.y])), pads: c.pads.slice() } : null]));
       for (const p of left) { // asymmetric pads (SOT-23 etc.): nearest part whose existing pads are close by
         let best = null, bd = 1e9;
         for (const c of cg.near(p.x, p.y, 12)) {
           if (!okSide(p, c)) continue;
           let d = Math.hypot(c.x - p.x, c.y - p.y);
           if (d > maxR(c) + 0.5) continue;
-          if (c.pads.length) { const bb = G.bboxOf(c.pads.map(q => [q.x, q.y])); const dx = Math.max(bb[0] - p.x, 0, p.x - bb[2]), dy = Math.max(bb[1] - p.y, 0, p.y - bb[3]); d = Math.min(d, Math.hypot(dx, dy) + 0.2); }
+          const k = core.get(c);
+          if (k) { const bb = k.bb; const dx = Math.max(bb[0] - p.x, 0, p.x - bb[2]), dy = Math.max(bb[1] - p.y, 0, p.y - bb[3]); d = Math.min(d, Math.hypot(dx, dy) + 0.2); }
+          if (k && !k.pads.some(q => sameSize(p, q))) d *= 2.5; // a part rarely mixes pad sizes: prefer one that already has this size // a part rarely mixes pad sizes: prefer one that already has this size
           if (d < bd) { bd = d; best = c; }
         }
         if (best) best.pads.push(p);
@@ -2490,13 +2557,14 @@ globalThis.Project = (() => {
       return hit >= 0.7 * common.length;
     };
     const rank = b => (b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2) - (/(^|\/)(work|tmp|temp|backup|old|review|snapshots?|sim)(\/|#|$)/i.test(b.path) ? 0.5 : 0);
-    const keep = [];
+    const keep = [], merged = {};
     for (const b of boards.slice().sort((x, y) => rank(y) - rank(x))) {
       const s = sig(b);
       const dup = keep.find(k => { const t = sig(k); const common = [...s.refs].filter(r => t.refs.has(r)); return common.length >= 0.7 * Math.min(s.refs.size, t.refs.size) && Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2 && samePlacement(s, t, common); });
-      if (dup) { if (rank(b) < 2 && rank(dup) === 2) notes.push(`${b.path.replace(/#.*$/, "")}：和原生设计文件 ${baseOf(dup.path.replace(/#.*$/, ""))} 是同一块板，已使用原生文件`); continue; }
+      if (dup) { if (rank(b) < 2 && rank(dup) === 2) (merged[baseOf(dup.path.replace(/#.*$/, ""))] ||= []).push(b.path.replace(/#.*$/, "")); continue; }
       keep.push(b);
     }
+    for (const [src, list] of Object.entries(merged)) notes.push(`另有 ${list.length} 份 Gerber 和设计文件 ${src} 是同一块板（例如 ${list[0]}），已直接使用设计文件`);
     // exact copies (same placement) collapse silently; different revisions with the same name get their folder appended
     const exact = new Set(), uniq = [];
     for (const b of keep) { const k = b.board.parts.map(p => p.r + ":" + p.c.join(",")).sort().join("|"); if (exact.has(k)) continue; exact.add(k); uniq.push(b); }
@@ -2746,7 +2814,8 @@ async function ingest(list) {
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   showNotes(msgs);
-  if (firstKey) { toast(`读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  const from = [...roots].join("、");
+  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
 }
 function showNotes(msgs) {
@@ -3247,6 +3316,10 @@ function twoStep(btn, label, fn) {
   armed = btn; const old = btn.textContent; btn.textContent = "再点一次确认"; setTimeout(() => { if (armed === btn) { armed = null; btn.textContent = old; } }, 3000);
 }
 $("#resetProg").onclick = e => twoStep(e.currentTarget, "清空进度", () => { doneAll[S.b.key] = {}; saveDone(); render(); renderList(); renderCard(); });
+$("#rmAll").onclick = e => twoStep(e.currentTarget, "清空全部板子", () => {
+  for (const b of S.boards) DB.del(b.key);
+  S.boards = []; doneAll = {}; saveDone(); showNotes([]); showEmpty();
+});
 $("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => {
   const k = S.b.key; DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
   if (S.boards.length) openBoard(S.boards[0].key); else showEmpty();

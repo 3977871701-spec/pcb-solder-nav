@@ -75,7 +75,8 @@ async function ingest(list) {
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   showNotes(msgs);
-  if (firstKey) { toast(`读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  const from = [...roots].join("、");
+  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
 }
 function showNotes(msgs) {
@@ -576,6 +577,10 @@ function twoStep(btn, label, fn) {
   armed = btn; const old = btn.textContent; btn.textContent = "再点一次确认"; setTimeout(() => { if (armed === btn) { armed = null; btn.textContent = old; } }, 3000);
 }
 $("#resetProg").onclick = e => twoStep(e.currentTarget, "清空进度", () => { doneAll[S.b.key] = {}; saveDone(); render(); renderList(); renderCard(); });
+$("#rmAll").onclick = e => twoStep(e.currentTarget, "清空全部板子", () => {
+  for (const b of S.boards) DB.del(b.key);
+  S.boards = []; doneAll = {}; saveDone(); showNotes([]); showEmpty();
+});
 $("#rmBoard").onclick = e => twoStep(e.currentTarget, "移除这块板", () => {
   const k = S.b.key; DB.del(k); S.boards = S.boards.filter(x => x.key !== k); delete doneAll[k]; saveDone();
   if (S.boards.length) openBoard(S.boards[0].key); else showEmpty();

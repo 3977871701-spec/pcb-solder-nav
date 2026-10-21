@@ -50,6 +50,7 @@ globalThis.Geom = (() => {
   function padRec(num, net, polys, kind, holeD = "") {
     const all = polys.flat(); const bb = bboxOf(all);
     const d = polys.map(polyD).join("") + holeD;
+    if (net && /^Unused_[0-9A-F]+$/i.test(net)) net = ""; // Allegro names every unconnected pin "Unused_…"
     return [String(num ?? ""), net || "", d, kind, f3((bb[0] + bb[2]) / 2), f3((bb[1] + bb[3]) / 2), f3(Math.min(bb[2] - bb[0], bb[3] - bb[1])), bb];
   }
   // empty board skeleton every importer fills in
