@@ -227,7 +227,7 @@ function orientText(p) {
   if (p.pol === "none-bi") return "双向 TVS，无极性，两个方向都行";
   if (p.pol && !p.p1) return `有极性，但这份数据没有引脚编号：方向请对照板上丝印${p.rot ? `（坐标文件角度 ${p.rot}°）` : ""}`;
   if (!p.pol) return "无极性";
-  const side = S.split ? (p.tht ? "F" : p.s) : S.side;
+  const side = S.split ? p.s : S.side;
   const v = view(side).vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
   const where = `（${side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
   if (p.pol === "k1") return `阴极 K 在${w}侧：器件色带/横线朝${w}${where}`;
@@ -272,10 +272,12 @@ function renderPane(P) {
   if (selRefs.size || netRefs.size) world.classList.add("dim");
   const parts = el("g", {}, world), labels = el("g", {}, world), pnums = el("g", {}, world), rings = el("g", {}, world);
   for (const p of b.parts) {
-    if (!onSide(p, side)) continue;
-    const g = el("g", { class: "part" + (p.tp ? " tp" : "") + (p.dnp ? " dnp" : "") + (done[p.r] && !pin ? " done" : "") + (selRefs.has(p.r) ? " hi" : "") + (netRefs.has(p.r) ? " nhi" : "") + (S.cur === p.r ? " cur" : ""), "data-r": p.r }, parts);
-    if (p.body) el("path", { d: p.body, class: "body" }, g);
-    if (p.silk && !p.tp) el("path", { d: p.silk, class: "sk" }, g);
+    // parts placed on the other side are hidden; of a through-hole part only its holes show through
+    const thru = p.s !== side;
+    if (thru && !p.tht) continue;
+    const g = el("g", { class: "part" + (thru ? " thru" : "") + (p.tp ? " tp" : "") + (p.dnp ? " dnp" : "") + (done[p.r] && !pin ? " done" : "") + (selRefs.has(p.r) ? " hi" : "") + (netRefs.has(p.r) ? " nhi" : "") + (S.cur === p.r ? " cur" : ""), "data-r": p.r }, parts);
+    if (p.body && !thru) el("path", { d: p.body, class: "body" }, g);
+    if (p.silk && !p.tp && !thru) el("path", { d: p.silk, class: "sk" }, g);
     const polar = p.pol && p.pol !== "none-bi";
     if (pin) {
       p.pads.forEach(([n, net, d, th, px, py, sz], i) => {
@@ -292,6 +294,7 @@ function renderPane(P) {
       if (p1d) el("path", { d: p1d, class: "pad p1" }, g);
       if (nd) el("path", { d: nd, class: "pad npth" }, g);
     }
+    if (thru) continue;
     el("rect", { x: p.bb[0], y: p.bb[1], width: p.bb[2] - p.bb[0], height: p.bb[3] - p.bb[1], fill: "transparent" }, g);
     if ((p.skip && !(pin && p.tp)) || S.lbl === "none") continue;
     const w = p.bb[2] - p.bb[0], h = p.bb[3] - p.bb[1], hi = selRefs.has(p.r);
@@ -365,7 +368,7 @@ const endPtr = e => {
   if (!moved && e.type === "pointerup") {
     const P = paneOf(document.elementFromPoint(e.clientX, e.clientY) || e.target);
     if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY, P); if (hp) { pickPad(hp.r, hp.i, false, true); return; } }
-    const hit = document.elementsFromPoint(e.clientX, e.clientY).map(n => n.closest && n.closest(".part")).find(Boolean);
+    const hit = document.elementsFromPoint(e.clientX, e.clientY).map(n => n.closest && n.closest(".part:not(.thru)")).find(Boolean);
     if (hit) pickPart(hit.dataset.r, false);
   }
 };
@@ -415,7 +418,7 @@ function selectGroup(id, zoom) {
   if (S.mode === "pin") { const g0 = S.b.groups.find(g => g.id === id); if (g0) pickPart(g0.refs[0], true); return; }
   S.sel = S.sel === id && !zoom ? null : id; S.cur = null; S.pad = null;
   const g = S.b.groups.find(g => g.id === S.sel);
-  if (g) { const p = S.pm[g.refs[0]]; if (p && !p.tht && p.s !== S.side) setSide(p.s); }
+  if (g) { const p = S.pm[g.refs[0]]; if (p && p.s !== S.side) setSide(p.s); }
   render(); renderList(); renderCard();
   if (g && zoom) zoomTo(g.refs);
   const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -424,7 +427,7 @@ function pickPart(r, zoom) {
   const p = S.pm[r]; if (!p) return;
   const g = groupOfRef(r);
   S.sel = g && S.mode !== "pin" ? g.id : null; S.cur = r; S.pad = null;
-  if (!p.tht && p.s !== S.side) setSide(p.s);
+  if (p.s !== S.side) setSide(p.s);
   render(); renderList(); renderCard();
   if (zoom) zoomTo([r]);
   const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row && !zoom) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
