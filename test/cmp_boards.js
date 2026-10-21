@@ -2,7 +2,8 @@
 // then checks every pad (matched by pin number) after alignment.
 function cmpBoards(a, b, label) {
   const A = Object.fromEntries(a.parts.map(p => [p.r, p])), B = Object.fromEntries(b.parts.map(p => [p.r, p]));
-  const common = Object.keys(A).filter(r => B[r] && A[r].pads.length && B[r].pads.length);
+  const dupl = new Set(b.parts.filter(p => p.origRef).map(p => p.origRef)); // ambiguous: designator used several times in the design
+  const common = Object.keys(A).filter(r => !dupl.has(r) && B[r] && A[r].pads.length && B[r].pads.length);
   const pc = p => { const xs = p.pads.map(q => q[4]), ys = p.pads.map(q => q[5]); return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]; };
   const dx = [], dy = [];
   for (const r of common) { const ca = pc(A[r]), cb = pc(B[r]); dx.push(cb[0] - ca[0]); dy.push(cb[1] - ca[1]); }

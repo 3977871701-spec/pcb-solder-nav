@@ -161,9 +161,11 @@ globalThis.ImpEasyEDA = (() => {
   }
 
   // gather every document from all EasyEDA files of a project and build one board per PCB document
-  function parseProject(texts) {
+  // items: strings or {text, name}; one board per PCB document (multi-board projects keep each board's own title)
+  function parseProject(items) {
     const pool = { foot: {}, dev: {}, pcbs: [] };
-    for (const t of texts) for (const d of docs(t)) {
+    for (const it of items) for (const d of docs(typeof it === "string" ? it : it.text)) {
+      d.src = typeof it === "string" ? "" : it.name || "";
       const type = String(d.head.docType || "").toUpperCase(), uuid = d.head.uuid;
       if (type === "FOOTPRINT") {
         // keep record ids on pads so PAD_NET can match by pad id
@@ -174,7 +176,11 @@ globalThis.ImpEasyEDA = (() => {
         if (uuid) pool.dev[uuid] = { attrs: (meta && meta.b && meta.b.attributes) || {}, title: meta && meta.b && meta.b.title };
       } else if (type === "PCB") pool.pcbs.push(d);
     }
-    return pool.pcbs.map(p => ({ board: build(p, pool), title: p.head.title || "", uuid: p.head.uuid, missingFootprints: !Object.keys(pool.foot).length }));
+    return pool.pcbs.map(p => {
+      const meta = p.recs.find(r => r.type === "META"), board = build(p, pool);
+      const withPads = board.parts.filter(q => q.pads.length && q.fp !== "PAD").length, comps = board.parts.filter(q => q.fp !== "PAD").length;
+      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", uuid: p.head.uuid, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
+    });
   }
   return { parseProject, docs, isDoc, pathRuns };
 })();

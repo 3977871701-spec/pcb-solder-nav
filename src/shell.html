@@ -64,7 +64,13 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .svgwrap { position: relative; height: min(74vh, 820px); touch-action: none; cursor: grab; }
 @media (max-width: 900px) { .svgwrap { height: 62vh; } }
 .svgwrap.drag { cursor: grabbing; }
-svg#board { width: 100%; height: 100%; display: block; user-select: none; }
+.panes { display: flex; height: 100%; }
+.pane { position: relative; flex: 1 1 0; min-width: 0; height: 100%; }
+.pane + .pane { border-left: 2px solid var(--line); }
+@media (max-width: 700px) { .panes { flex-direction: column; } .pane + .pane { border-left: 0; border-top: 2px solid var(--line); } }
+.pane svg { width: 100%; height: 100%; display: block; user-select: none; }
+.ptag { position: absolute; top: 8px; left: 10px; z-index: 2; font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 8px; pointer-events: none; color: var(--fg); }
+.ptag b { color: var(--net); font-weight: 600; }
 .b-fill { fill: var(--board); }
 .b-edge { fill: none; stroke: var(--edge); stroke-width: .25; }
 .trk { fill: none; stroke: var(--track); stroke-linecap: round; }
@@ -242,6 +248,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <option value="none">不标注</option>
       </select>
       <button type="button" class="tbtn" id="trkBtn" aria-pressed="true">走线</button>
+      <button type="button" class="tbtn" id="splitBtn" aria-pressed="false" hidden title="左右分屏同时看顶面和底面（D）">双面对照</button>
       <span class="spacer"></span>
       <button type="button" class="tbtn" id="zin" aria-label="放大">＋</button>
       <button type="button" class="tbtn" id="zout" aria-label="缩小">－</button>
@@ -256,7 +263,10 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <span class="hint" id="hint">滚轮/双指缩放 · 拖动平移</span>
     </div>
     <div class="svgwrap" id="wrap">
-      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="panes">
+        <div class="pane" id="paneA"><span class="ptag" id="tagA">顶面</span><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div class="pane" id="paneB" hidden><span class="ptag" id="tagB">底面（镜像）</span><svg id="board2" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </div>
       <div class="card" id="card" hidden></div>
     </div>
     <div class="legend">
@@ -293,7 +303,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <div class="notes" id="notes" hidden></div>
     <div id="steps" class="side"></div>
     <div class="foot">
-      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
+      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>D</kbd> 双面对照　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
       <p>极性按常见封装库惯例（KiCad、立创、Altium）判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
       <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
     </div>

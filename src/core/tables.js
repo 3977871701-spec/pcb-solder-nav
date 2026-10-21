@@ -78,20 +78,29 @@ globalThis.Tables = (() => {
     let rows = rowsIn ? tryRows(rowsIn) : null;
     if (!rows) rows = tryRows(Files.csv(text));
     if (!rows) rows = tryRows(lines.map(tokens).filter(t => t.length));
-    if (!rows) { // header-less "REF X Y ROT [SIDE]" (Allegro place_txt and similar)
-      const out = [];
+    let header = !!rows;
+    if (!rows) { // header-less "REF X Y ROT [SIDE]" (Allegro place_txt and similar) — must look like a real placement list
+      const out = [], NUM = /^-?\d+(\.\d+)?$/, REF = /^[A-Za-z]{1,4}\d{1,4}[A-Za-z]?$/;
+      let cand = 0;
       for (const l of lines) {
-        const t = tokens(l); if (t.length < 4 || !isRef(t[0])) continue;
-        const x = num(t[1]), y = num(t[2]), r = num(t[3]); if (![x, y, r].every(Number.isFinite)) continue;
+        const t = tokens(l); if (!t.length || /^[#;!*/]|^(uunits|units)/i.test(l.trim())) continue;
+        cand++;
+        if (t.length < 4 || !REF.test(t[0]) || !NUM.test(t[1]) || !NUM.test(t[2]) || !NUM.test(t[3])) continue;
         const sideTok = t.slice(4).find(v => /^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v));
-        out.push({ ref: t[0], x, y, rot: r, side: sideTok ? sideOf(sideTok) : "F", val: "", fp: t.slice(4).find(v => !/^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v)) || "", unit: globalUnit });
+        out.push({ ref: t[0], x: +t[1], y: +t[2], rot: +t[3], side: sideTok ? sideOf(sideTok) : "F", val: "", fp: t.slice(4).find(v => !/^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v)) || "", unit: globalUnit });
       }
-      rows = out.length >= 2 ? out : null;
+      const uniq = new Set(out.map(r => r.ref.toUpperCase())).size;
+      rows = out.length >= 3 && out.length >= 0.6 * cand && uniq >= 0.9 * out.length ? out : null;
+    } else {
+      // header found: still reject lists whose "designators" are not designators (e.g. net names) or are mostly repeated
+      const REF = /^[A-Za-z][A-Za-z_]{0,5}\d{1,5}[A-Za-z0-9_]*$/;
+      const ok = rows.filter(r => REF.test(r.ref) && !/^N\d{4,}$/i.test(r.ref)).length, uniq = new Set(rows.map(r => r.ref)).size;
+      if (ok < 0.7 * rows.length || uniq < 0.8 * rows.length) rows = null;
     }
     if (!rows) return null;
     const units = new Set(rows.map(r => r.unit).filter(Boolean));
     const unit = units.size === 1 ? [...units][0] : globalUnit;
-    return { rows: rows.map(r => ({ ...r, x: r.x * UNIT[r.unit || unit || "mm"], y: r.y * UNIT[r.unit || unit || "mm"] })), unit: unit || "mm", explicit: !!unit };
+    return { rows: rows.map(r => ({ ...r, x: r.x * UNIT[r.unit || unit || "mm"], y: r.y * UNIT[r.unit || unit || "mm"] })), unit: unit || "mm", explicit: !!unit, header };
   }
 
   // ---------- IPC-D-356(A) ----------

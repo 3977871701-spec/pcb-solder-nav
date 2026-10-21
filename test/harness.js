@@ -1,7 +1,7 @@
 // Test helpers: load the browser modules into Node and compare a parsed board with a pcbnew reference dump.
 const fs = require("fs"), path = require("path");
 const SRC = path.join(__dirname, "..", "src");
-const ORDER = ["core/geom.js", "core/files.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js", "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "core/project.js", "enrich.js"];
+const ORDER = ["core/geom.js", "core/files.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js", "import/easyeda_std.js", "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "core/project.js", "enrich.js"];
 for (const f of ORDER) if (fs.existsSync(path.join(SRC, f))) require(path.join(SRC, f));
 
 // reference: JSON written by test/pcbnew_dump.py  → {fps:[{ref, side, pads:[{n, net, poly:[[[x,y]...]]}]}]}

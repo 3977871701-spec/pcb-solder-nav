@@ -58,19 +58,24 @@ async function ingest(list) {
   try { res = await Project.load(list, msg => { $("#loadMsg").textContent = msg; }); }
   catch (e) { toast("读取失败：" + e.message, 6000); $("#loadMsg").textContent = ""; return; }
   $("#loadMsg").textContent = "";
-  let firstKey = null;
+  let firstKey = null; const added = [];
+  // re-importing a folder replaces everything that earlier imports of that folder produced
+  const roots = new Set(list.map(e => e.path.split("/")[0]).filter((r, _, a) => list.some(e => e.path.includes("/"))));
   for (const m of res.boards) {
     const b = m.board;
     Enrich.enrich(b, m.bom);
+    if (!b.groups.length && !b.dnp.length) { res.notes.push(`${m.path.replace(/#.*$/, "")}：里面没有需要焊接的器件（可能只是封装库或板框），已跳过`); continue; }
     Object.assign(b, { name: m.name, sub: m.source, source: m.source, bomFile: m.bomFile || "", file: m.path.replace(/#.*$/, "").split("/").pop(), added: Date.now(), warn: b.warn || [] });
     b.key = boardKey(m, b);
     const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source));
     if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
-    DB.put(b); firstKey ||= b.key;
+    DB.put(b); firstKey ||= b.key; added.push(b.key);
   }
+  const newKeys = new Set(added);
+  if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   showNotes(msgs);
-  if (firstKey) { toast(`读入 ${res.boards.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  if (firstKey) { toast(`读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
 }
 function showNotes(msgs) {
@@ -170,8 +175,8 @@ $("#loadDemo").onclick = () => {
 };
 
 // ---------- view transform (mirror for bottom, rotate in 90° steps) ----------
-function view() {
-  const [x0, y0, x1, y1] = S.b.bbox, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, B = S.side === "B", r = S.rot;
+function view(side = S.side) {
+  const [x0, y0, x1, y1] = S.b.bbox, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, B = side === "B", r = S.rot;
   const a = r * Math.PI / 180, c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
   const vec = (dx, dy) => { if (B) dx = -dx; return [dx * c - dy * s, dx * s + dy * c]; };
   const pt = (x, y) => { const v = vec(x - cx, y - cy); return [cx + v[0], cy + v[1]]; };
@@ -180,6 +185,32 @@ function view() {
   return { tf, pt, vec, up };
 }
 const onSide = (p, side) => p.tht || p.s === side;
+
+// two drawing panes: A is the normal view; in double-sided pin testing A shows the top and B the (mirrored) bottom
+const PANES = [
+  { svg: $("#board"), box: $("#paneA"), tag: $("#tagA"), key: "vb", side: "F", world: null },
+  { svg: $("#board2"), box: $("#paneB"), tag: $("#tagB"), key: "vb2", side: "B", world: null },
+];
+const P0 = PANES[0];
+const paneOf = target => (target && PANES.find(P => P.box.contains(target))) || P0;
+function selectedNet() { const pd = S.mode === "pin" && S.pad ? S.pm[S.pad.r]?.pads[S.pad.i] : null; return pd && pd[1] ? pd[1] : null; }
+const isThruPad = x => { const p = S.pm[x.r]; return p && (p.tht || p.pads[x.i][3] === 1); };
+// pads of the selected net on each side (through-hole pads count for both)
+function netSides(net) {
+  const out = { F: 0, B: 0 };
+  for (const x of S.netIdx[net] || []) { const p = S.pm[x.r]; if (!p) continue; if (isThruPad(x)) { out.F++; out.B++; } else out[p.s]++; }
+  return out;
+}
+// split when the selected net cannot be seen from one side alone
+function wantSplit() {
+  if (S.mode !== "pin") return false;
+  if (S.splitForce) return true;
+  const net = selectedNet(); if (!net) return false;
+  const all = S.netIdx[net] || [];
+  const smd = s => all.some(x => !isThruPad(x) && S.pm[x.r] && S.pm[x.r].s === s);
+  const tht = all.some(isThruPad);
+  return smd("B") && (smd("F") || tht);
+}
 
 function dirWord(dx, dy) {
   if (Math.hypot(dx, dy) < 0.05) return "中间";
@@ -190,8 +221,9 @@ function orientText(p) {
   if (p.pol === "none-bi") return "双向 TVS，无极性，两个方向都行";
   if (p.pol && !p.p1) return `有极性，但这份数据没有引脚编号：方向请对照板上丝印${p.rot ? `（坐标文件角度 ${p.rot}°）` : ""}`;
   if (!p.pol) return "无极性";
-  const v = view().vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
-  const where = `（当前${S.side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
+  const side = S.split ? (p.tht ? "F" : p.s) : S.side;
+  const v = view(side).vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
+  const where = `（${side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
   if (p.pol === "k1") return `阴极 K 在${w}侧：器件色带/横线朝${w}${where}`;
   if (p.pol === "plus1") return `正极 + 在${w}侧${where}`;
   return `1 脚在${w}${w.length === 1 ? "侧" : "角"}：对准芯片圆点/缺角${where}`;
@@ -200,28 +232,41 @@ function orientText(p) {
 function shortVal(p) { const s = (p.val && p.val !== "~" ? p.val : p.nm || "").split(/\s+/)[0]; return s.length > 10 ? s.slice(0, 9) + "…" : s; }
 
 function render() {
-  const b = S.b, svg = $("#board"), V = view();
+  const split = wantSplit(), was = !!S.split;
+  S.split = split;
+  PANES[1].box.hidden = !split;
+  $("#splitBtn").setAttribute("aria-pressed", split);
+  if (split) { P0.side = "F"; PANES[1].side = "B"; } else P0.side = S.side;
+  if (split !== was) { S.vb = null; S.vb2 = null; }
+  const net = selectedNet(), ns = net ? netSides(net) : null;
+  for (const P of split ? PANES : [P0]) {
+    renderPane(P);
+    P.tag.innerHTML = (P.side === "B" ? "底面（镜像）" : "顶面") + (ns ? ` · 同网络 <b>${P.side === "B" ? ns.B : ns.F}</b> 个焊盘` : "");
+  }
+  P0.tag.hidden = !split && S.mode !== "pin";
+}
+function renderPane(P) {
+  const b = S.b, svg = P.svg, side = P.side, V = view(side);
   svg.innerHTML = "";
   svg.classList.toggle("pinmode", S.mode === "pin");
   const [x0, y0, x1, y1] = b.bbox;
-  const world = el("g", { transform: V.tf }, svg); S.worldEl = world;
+  const world = el("g", { transform: V.tf }, svg); P.world = world;
   el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: .8, class: "b-fill" }, world);
   if (S.trk) {
-    for (const [w, d] of b.tracks[S.side]) el("path", { d, class: "trk", "stroke-width": w }, world);
+    for (const [w, d] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, world);
     for (const [vx, vy, vr] of b.vias) el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, world);
   }
-  if (b.silk[S.side]) el("path", { d: b.silk[S.side], class: "bsilk" }, world);
+  if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));
-  const selPad = pin && S.pad ? S.pm[S.pad.r]?.pads[S.pad.i] : null;
-  const selNet = selPad && selPad[1] ? selPad[1] : null;
+  const selNet = selectedNet();
   const netRefs = new Set(selNet ? (S.netIdx[selNet] || []).map(x => x.r) : []);
   if (pin && S.cur) netRefs.add(S.cur);
-  const root = svg; if (selRefs.size || netRefs.size) world.classList.add("dim");
+  if (selRefs.size || netRefs.size) world.classList.add("dim");
   const parts = el("g", {}, world), labels = el("g", {}, world), pnums = el("g", {}, world), rings = el("g", {}, world);
   for (const p of b.parts) {
-    if (!onSide(p, S.side)) continue;
+    if (!onSide(p, side)) continue;
     const g = el("g", { class: "part" + (p.tp ? " tp" : "") + (p.dnp ? " dnp" : "") + (done[p.r] && !pin ? " done" : "") + (selRefs.has(p.r) ? " hi" : "") + (netRefs.has(p.r) ? " nhi" : "") + (S.cur === p.r ? " cur" : ""), "data-r": p.r }, parts);
     if (p.body) el("path", { d: p.body, class: "body" }, g);
     if (p.silk && !p.tp) el("path", { d: p.silk, class: "sk" }, g);
@@ -250,47 +295,61 @@ function render() {
     t.textContent = S.lbl === "val" && !pin ? shortVal(p) : p.r + (p.dnp ? " DNP" : "");
     if (hi) el("circle", { cx, cy, r: Math.max(w, h) / 2 + .9, class: "ring" + (S.cur === p.r ? " cur" : "") }, rings);
   }
-  setVB(S.vb);
+  setVB(S[P.key], P);
 }
 
-// ---------- pan / zoom ----------
-function fitVB() {
-  const V = view(), [x0, y0, x1, y1] = S.b.bbox, c = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(q => V.pt(q[0], q[1]));
+// ---------- pan / zoom (per pane) ----------
+function fitVB(P = P0) {
+  const V = view(P.side), [x0, y0, x1, y1] = S.b.bbox, c = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(q => V.pt(q[0], q[1]));
   const xs = c.map(q => q[0]), ys = c.map(q => q[1]), m = 3;
   return { x: Math.min(...xs) - m, y: Math.min(...ys) - m, w: Math.max(...xs) - Math.min(...xs) + 2 * m, h: Math.max(...ys) - Math.min(...ys) + 2 * m };
 }
-function setVB(v) { S.vb = v || fitVB(); $("#board").setAttribute("viewBox", `${S.vb.x} ${S.vb.y} ${S.vb.w} ${S.vb.h}`); }
-function zoomAt(f, px, py) {
-  const v = S.vb, r = $("#board").getBoundingClientRect();
+function setVB(v, P = P0) { const vb = S[P.key] = v || fitVB(P); P.svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+function zoomAt(f, px, py, P = P0) {
+  const v = S[P.key] || fitVB(P), r = P.svg.getBoundingClientRect();
   const s = Math.min(r.width / v.w, r.height / v.h), ox = (r.width - v.w * s) / 2, oy = (r.height - v.h * s) / 2;
   const wx = v.x + ((px ?? r.width / 2) - ox) / s, wy = v.y + ((py ?? r.height / 2) - oy) / s;
-  const fw = fitVB().w, nw = Math.max(1.5, Math.min(fw * 2, v.w / f)), k = nw / v.w;
-  setVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w: nw, h: v.h * k });
+  const fw = fitVB(P).w, nw = Math.max(1.5, Math.min(fw * 2, v.w / f)), k = nw / v.w;
+  setVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w: nw, h: v.h * k }, P);
 }
-function zoomTo(refs) {
-  const V = view(); let a = [1e9, 1e9, -1e9, -1e9];
-  for (const r of refs) { const p = S.pm[r]; if (!p) continue;
-    for (const q of [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]) { const t = V.pt(q[0], q[1]); a = [Math.min(a[0], t[0]), Math.min(a[1], t[1]), Math.max(a[2], t[0]), Math.max(a[3], t[1])]; } }
+// frame a set of board points in a pane
+function frame(pts, P = P0, minSize = 12) {
+  const V = view(P.side); let a = [1e9, 1e9, -1e9, -1e9];
+  for (const q of pts) { const t = V.pt(q[0], q[1]); a = [Math.min(a[0], t[0]), Math.min(a[1], t[1]), Math.max(a[2], t[0]), Math.max(a[3], t[1])]; }
   if (a[0] > a[2]) return;
-  const m = 4, w = Math.max(a[2] - a[0] + 2 * m, 12), h = Math.max(a[3] - a[1] + 2 * m, 12);
-  setVB({ x: (a[0] + a[2]) / 2 - w / 2, y: (a[1] + a[3]) / 2 - h / 2, w, h });
+  const m = 4, w = Math.max(a[2] - a[0] + 2 * m, minSize), h = Math.max(a[3] - a[1] + 2 * m, minSize);
+  setVB({ x: (a[0] + a[2]) / 2 - w / 2, y: (a[1] + a[3]) / 2 - h / 2, w, h }, P);
+}
+function zoomTo(refs, P = P0) {
+  const pts = [];
+  for (const r of refs) { const p = S.pm[r]; if (p) pts.push([p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]); }
+  frame(pts, P);
+}
+// double-sided view: frame every pad of the selected net in each pane
+function frameNet() {
+  const net = selectedNet(); if (!net) return;
+  for (const P of S.split ? PANES : [P0]) {
+    const pts = [];
+    for (const x of S.netIdx[net] || []) { const p = S.pm[x.r]; if (!p || !(onSide(p, P.side) || isThruPad(x))) continue; const q = p.pads[x.i]; pts.push([q[4] - 1, q[5] - 1], [q[4] + 1, q[5] + 1]); }
+    if (pts.length) frame(pts, P); else setVB(null, P);
+  }
 }
 const wrap = $("#wrap");
-wrap.addEventListener("wheel", e => { if (e.target.closest(".card")) return; e.preventDefault(); const r = wrap.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
-const ptrs = new Map(); let moved = false;
-wrap.addEventListener("pointerdown", e => { if (e.target.closest(".card")) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; wrap.setPointerCapture(e.pointerId); wrap.classList.add("drag"); });
+wrap.addEventListener("wheel", e => { if (e.target.closest(".card")) return; e.preventDefault(); const P = paneOf(e.target), r = P.svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top, P); }, { passive: false });
+const ptrs = new Map(); let moved = false, dragPane = P0;
+wrap.addEventListener("pointerdown", e => { if (e.target.closest(".card")) return; if (!ptrs.size) dragPane = paneOf(e.target); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; wrap.setPointerCapture(e.pointerId); wrap.classList.add("drag"); });
 wrap.addEventListener("pointermove", e => {
   if (!ptrs.has(e.pointerId)) return;
-  const prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+  const P = dragPane, prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
   if (ptrs.size === 1) {
     const dx = cur.x - prev.x, dy = cur.y - prev.y; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-    const r = $("#board").getBoundingClientRect(), s = Math.min(r.width / S.vb.w, r.height / S.vb.h);
-    setVB({ ...S.vb, x: S.vb.x - dx / s, y: S.vb.y - dy / s });
+    const v = S[P.key] || fitVB(P), r = P.svg.getBoundingClientRect(), s = Math.min(r.width / v.w, r.height / v.h);
+    setVB({ ...v, x: v.x - dx / s, y: v.y - dy / s }, P);
   } else if (ptrs.size === 2) {
     moved = true;
     const other = [...ptrs.entries()].find(([k]) => k !== e.pointerId)[1];
-    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y), r = wrap.getBoundingClientRect();
-    if (d0 > 0) zoomAt(d1 / d0, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top);
+    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y), r = P.svg.getBoundingClientRect();
+    if (d0 > 0) zoomAt(d1 / d0, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top, P);
   }
   ptrs.set(e.pointerId, cur);
 });
@@ -298,29 +357,35 @@ const endPtr = e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId); if (!ptrs.size) wrap.classList.remove("drag");
   if (!moved && e.type === "pointerup") {
-    if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY); if (hp) { pickPad(hp.r, hp.i, false); return; } }
+    const P = paneOf(document.elementFromPoint(e.clientX, e.clientY) || e.target);
+    if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY, P); if (hp) { pickPad(hp.r, hp.i, false, true); return; } }
     const hit = document.elementsFromPoint(e.clientX, e.clientY).map(n => n.closest && n.closest(".part")).find(Boolean);
     if (hit) pickPart(hit.dataset.r, false);
   }
 };
 wrap.addEventListener("pointerup", endPtr); wrap.addEventListener("pointercancel", endPtr);
-function padAt(cx, cy) {
-  const pt = $("#board").createSVGPoint(); pt.x = cx; pt.y = cy;
-  const w = pt.matrixTransform(S.worldEl.getScreenCTM().inverse()), tol = S.vb.w / 80;
+function padAt(cx, cy, P = P0) {
+  if (!P.world) return null;
+  const pt = P.svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+  const v = S[P.key] || fitVB(P), w = pt.matrixTransform(P.world.getScreenCTM().inverse()), tol = v.w / 80;
   let best = null, bd = 1e9;
   for (const p of S.b.parts) {
-    if (!onSide(p, S.side)) continue;
+    if (!onSide(p, P.side)) continue;
     p.pads.forEach(([n, net, d, th, px, py, sz], i) => { if (!d || th === 2) return; const dist = Math.hypot(w.x - px, w.y - py) - sz / 2; if (dist < bd) { bd = dist; best = { r: p.r, i }; } });
   }
   return bd < Math.max(.25, tol) ? best : null;
 }
 
 // ---------- toolbar ----------
-$("#zin").onclick = () => zoomAt(1.4); $("#zout").onclick = () => zoomAt(1 / 1.4); $("#zfit").onclick = () => setVB(null);
-$("#zsel").onclick = () => { const g = S.b.groups.find(g => g.id === S.sel); if (S.cur) zoomTo([S.cur]); else if (g) zoomTo(g.refs); };
+const visiblePanes = () => S.split ? PANES : [P0];
+const zoomAll = f => visiblePanes().forEach(P => zoomAt(f, undefined, undefined, P));
+const fitAll = () => visiblePanes().forEach(P => setVB(null, P));
+$("#zin").onclick = () => zoomAll(1.4); $("#zout").onclick = () => zoomAll(1 / 1.4); $("#zfit").onclick = fitAll;
+$("#splitBtn").onclick = () => { S.splitForce = !S.splitForce; render(); if (S.split) { if (selectedNet()) frameNet(); else fitAll(); } };
+$("#zsel").onclick = () => { const g = S.b.groups.find(g => g.id === S.sel); if (S.split && selectedNet()) frameNet(); else if (S.cur) zoomTo([S.cur]); else if (g) zoomTo(g.refs); };
 document.querySelectorAll("#sideSeg button").forEach(btn => btn.onclick = () => setSide(btn.dataset.side, true));
 document.querySelectorAll("#modeSeg button").forEach(btn => btn.onclick = () => setMode(btn.dataset.mode));
-$("#rotBtn").onclick = () => { S.rot = (S.rot + 90) % 360; $("#rotBtn").textContent = `⟳ ${S.rot}°`; S.vb = null; render(); renderCard(); };
+$("#rotBtn").onclick = () => { S.rot = (S.rot + 90) % 360; $("#rotBtn").textContent = `⟳ ${S.rot}°`; S.vb = null; S.vb2 = null; render(); renderCard(); };
 $("#lblSel").value = S.lbl; $("#lblSel").onchange = e => { S.lbl = e.target.value; LS.set("lbl", S.lbl); render(); };
 $("#trkBtn").setAttribute("aria-pressed", S.trk); $("#trkBtn").onclick = () => { S.trk = !S.trk; LS.set("trk", S.trk); $("#trkBtn").setAttribute("aria-pressed", S.trk); render(); };
 function setSide(side, user) {
@@ -333,7 +398,8 @@ function setMode(m) {
   S.mode = m; S.pad = null; S.cur = null; if (m === "pin") S.sel = null;
   document.querySelectorAll("#modeSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.mode === m));
   $("#tpSec").hidden = m !== "pin";
-  $("#hint").textContent = m === "pin" ? "点焊盘看引脚 · 放大后更好点" : "滚轮/双指缩放 · 拖动平移";
+  $("#hint").textContent = m === "pin" ? "点焊盘看引脚 · 两面都有连接时自动分屏" : "滚轮/双指缩放 · 拖动平移";
+  $("#splitBtn").hidden = m !== "pin"; if (m !== "pin") S.splitForce = false;
   render(); renderList(); renderCard();
 }
 
@@ -357,12 +423,16 @@ function pickPart(r, zoom) {
   if (zoom) zoomTo([r]);
   const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row && !zoom) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
-function pickPad(r, i, zoom) {
+function pickPad(r, i, zoom, fromBoard) {
   const p = S.pm[r]; if (!p) return;
+  const before = selectedNet();
   S.pad = { r, i }; S.cur = r;
-  if (!p.tht && p.s !== S.side) setSide(p.s);
+  const willSplit = wantSplit();
+  if (!willSplit && !p.tht && p.s !== S.side) setSide(p.s);
   render(); renderCard();
-  if (zoom) zoomTo([r]);
+  const net = selectedNet();
+  if (S.split) { if (net && (net !== before || !fromBoard)) frameNet(); }
+  else if (zoom) zoomTo([r]);
 }
 const orderedGroups = () => S.b.groups.slice();
 function stepGroup(dir, unfinishedOnly) {
@@ -431,7 +501,7 @@ function renderList() {
   host.innerHTML = "";
   let total = 0, nd = 0, tht = 0, bot = 0;
   const bySt = {};
-  for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 9) tht += g.refs.length; if (g.step === 8) bot += g.refs.length; }
+  for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 30) tht += g.refs.length; if (g.step > 10 && g.step < 20) bot += g.refs.length; }
   $("#nums").innerHTML = `<span><b>${b.groups.length}</b> 种</span><span><b>${total - tht}</b> 贴片</span><span><b>${tht}</b> 插件</span>${bot ? `<span>底面 <b>${bot}</b></span>` : ""}${b.dnp.length ? `<span>DNP <b>${b.dnp.length}</b></span>` : ""}<span>已焊 <b>${nd}</b> / ${total}</span>`;
   $("#bar").style.width = (total ? nd / total * 100 : 0) + "%";
   $("#src").textContent = `${b.source || ""} · ${b.file || ""}${b.bomFile ? " + BOM " + b.bomFile : "（没有找到 BOM，名称取自设计文件里的值）"}`;
@@ -490,7 +560,7 @@ $("#q").addEventListener("input", e => {
   const net = Object.keys(S.netIdx).find(n => n.toUpperCase() === q);
   if (net) { if (S.mode !== "pin") setMode("pin"); const x = S.netIdx[net][0]; pickPad(x.r, x.i, false); }
 });
-$("#clr").onclick = () => { S.sel = null; S.cur = null; S.pad = null; $("#q").value = ""; S.q = ""; render(); renderList(); renderCard(); setVB(null); };
+$("#clr").onclick = () => { S.sel = null; S.cur = null; S.pad = null; $("#q").value = ""; S.q = ""; render(); renderList(); renderCard(); fitAll(); };
 
 $("#copyBom").onclick = async () => {
   const b = S.b, rows = [["步骤", "名称", "封装", "LCSC", "MPN", "数量", "位号", "极性", "备注"]];
@@ -520,10 +590,11 @@ document.addEventListener("keydown", e => {
   else if (k === " ") { e.preventDefault(); $("#doneNext").click(); }
   else if (k === "t" || k === "T") setMode(S.mode === "pin" ? "solder" : "pin");
   else if (k === "f" || k === "F") setSide(S.side === "F" ? "B" : "F", true);
+  else if ((k === "d" || k === "D") && S.mode === "pin") $("#splitBtn").click();
   else if (k === "r" || k === "R") $("#rotBtn").click();
-  else if (k === "0") setVB(null);
-  else if (k === "+" || k === "=") zoomAt(1.4);
-  else if (k === "-") zoomAt(1 / 1.4);
+  else if (k === "0") fitAll();
+  else if (k === "+" || k === "=") zoomAll(1.4);
+  else if (k === "-") zoomAll(1 / 1.4);
   else if (k === "Escape") $("#clr").click();
   else return;
 });
@@ -544,7 +615,7 @@ function renderTabs() {
 }
 function openBoard(key) {
   S.b = S.boards.find(b => b.key === key) || S.boards[0];
-  S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
+  S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.vb2 = null; S.split = false; S.splitForce = false; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
   S.pm = Object.fromEntries(S.b.parts.map(p => [p.r, p]));
   S.netIdx = {};
   for (const p of S.b.parts) p.pads.forEach((pd, i) => { if (pd[1]) (S.netIdx[pd[1]] ||= []).push({ r: p.r, i, n: pd[0], s: p.tht ? "T" : p.s }); });
@@ -557,7 +628,7 @@ function openBoard(key) {
 }
 function showApp() { $("#empty").hidden = true; $("#app").hidden = false; $("#tabs").hidden = false; }
 function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#tabs").hidden = true; S.b = null; }
-window.addEventListener("resize", () => { if (S.b) setVB(S.vb); });
+window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => setVB(S[P.key], P)); });
 
 (async () => {
   const saved = await DB.all();

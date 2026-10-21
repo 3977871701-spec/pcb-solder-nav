@@ -163,18 +163,58 @@ globalThis.ImpAltium = (() => {
     return [local.map(([x, y]) => { const q = G.rotM(x, y, -pd.dir); return [q[0] + pd.x, q[1] + pd.y]; })];
   }
 
-  function parse(u8, fileName) {
+  // ASCII PcbDoc (Protel / Altium ASCII, also what 嘉立创EDA writes when exporting to Altium): one "|RECORD=…|K=V|…" per line
+  function readAscii(text) {
+    const rec = { comps: [], nets: [], pads: [], tracks: [], vias: [], board6: {}, comments: {} };
+    const lay = v => { const s = String(v || "").toUpperCase(); return s === "TOP" ? 1 : s === "BOTTOM" ? 32 : s === "MULTILAYER" ? 74 : s === "TOPOVERLAY" ? 33 : s === "BOTTOMOVERLAY" ? 34 : -1; };
+    const shp = v => { const s = String(v || "").toUpperCase(); return s === "ROUND" ? 1 : s === "OCTAGONAL" ? 3 : 2; };
+    const idx = v => v === undefined || v === "" ? 0xFFFF : +v;
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.startsWith("|")) continue;
+      const o = {}; for (const kv of line.split("|")) { const i = kv.indexOf("="); if (i > 0) o[kv.slice(0, i).trim().toUpperCase()] = kv.slice(i + 1); }
+      const R = (o.RECORD || "").toUpperCase();
+      if (R === "BOARD") rec.board6 = o;
+      else if (R === "COMPONENT") rec.comps.push(o);
+      else if (R === "NET") rec.nets.push(o.NAME || "");
+      else if (R === "PAD") {
+        const rr = (o.SHAPE || "").toUpperCase() === "ROUNDEDRECTANGLE";
+        rec.pads.push({ name: o.NAME || "", layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), x: unit(o.X), y: -unit(o.Y), top: [unit(o.XSIZE || o.TOPXSIZE), unit(o.YSIZE || o.TOPYSIZE)],
+          shape: shp(o.SHAPE || o.TOPSHAPE), dir: +o.ROTATION || 0, hole: unit(o.HOLESIZE), plated: !/^false$/i.test(o.PLATED || "true"), altShape: rr ? 9 : null, radius: rr ? +(o.CORNERRADIUS || o.CRPERCENTAGE || 50) : null });
+      } else if (R === "TRACK") rec.tracks.push({ layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), pts: [[unit(o.X1), -unit(o.Y1)], [unit(o.X2), -unit(o.Y2)]], w: unit(o.WIDTH) });
+      else if (R === "ARC") {
+        const c = [unit(o.LOCATION_X || o.X), -unit(o.LOCATION_Y || o.Y)], rad = unit(o.RADIUS), sa = +o.STARTANGLE || 0, ea = +o.ENDANGLE || 0;
+        let span = ((ea - sa) % 360 + 360) % 360; if (span === 0) span = 360; const n = Math.max(2, Math.ceil(span / 10)), pts = [];
+        for (let k = 0; k <= n; k++) { const t = (sa + span * k / n) * Math.PI / 180; pts.push([c[0] + rad * Math.cos(t), c[1] - rad * Math.sin(t)]); }
+        rec.tracks.push({ layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), pts, w: unit(o.WIDTH) });
+      } else if (R === "VIA") rec.vias.push({ x: unit(o.X), y: -unit(o.Y), d: unit(o.DIAMETER), net: idx(o.NET) });
+      else if (R === "TEXT" && /^true$/i.test(o.COMMENT || o.ISCOMMENT || "") && o.COMPONENT !== undefined) rec.comments[+o.COMPONENT] = o.TEXT || "";
+    }
+    // components are referenced by order of appearance (ID when present)
+    rec.comps = rec.comps.map((c, i) => ({ ...c, __i: c.ID !== undefined ? +c.ID : i }));
+    return rec;
+  }
+  function readBinary(u8) {
     const fs = cfb(u8);
     const get = n => { const k = Object.keys(fs).find(p => p.toLowerCase() === n.toLowerCase()); return k ? fs[k]() : null; };
     const compsRaw = get("Components6/Data"); if (!compsRaw) throw new Error("PcbDoc 里没有 Components6（可能是 PcbLib 或旧版本格式）");
-    const comps = propsRecords(compsRaw);
-    const nets = (get("Nets6/Data") ? propsRecords(get("Nets6/Data")) : []).map(o => o.NAME || "");
-    const pads = get("Pads6/Data") ? readPads(get("Pads6/Data")) : [];
-    const tracks = (get("Tracks6/Data") ? readTracks(get("Tracks6/Data")) : []).concat(get("Arcs6/Data") ? readArcs(get("Arcs6/Data")) : []);
-    const vias = get("Vias6/Data") ? readVias(get("Vias6/Data")) : [];
+    let comments = {}; try { const t6 = get("Texts6/Data"); if (t6) comments = readComments(t6); } catch (e) { /* value text is optional */ }
+    return {
+      comps: propsRecords(compsRaw).map((c, i) => ({ ...c, __i: i })),
+      nets: (get("Nets6/Data") ? propsRecords(get("Nets6/Data")) : []).map(o => o.NAME || ""),
+      pads: get("Pads6/Data") ? readPads(get("Pads6/Data")) : [],
+      tracks: (get("Tracks6/Data") ? readTracks(get("Tracks6/Data")) : []).concat(get("Arcs6/Data") ? readArcs(get("Arcs6/Data")) : []),
+      vias: get("Vias6/Data") ? readVias(get("Vias6/Data")) : [],
+      board6: get("Board6/Data") ? propsRecords(get("Board6/Data"))[0] || {} : {},
+      comments,
+    };
+  }
+  function parse(u8, fileName) {
+    let rec;
+    if (u8[0] === 0xD0 && u8[1] === 0xCF) rec = readBinary(u8);
+    else { const head = latin.decode(u8.subarray(0, 64)); if (!/^\|RECORD=/i.test(head.trim())) throw new Error("不是 Altium PcbDoc（既不是二进制也不是 ASCII 格式）"); rec = readAscii(latin.decode(u8)); }
+    const { comps, nets, pads, tracks, vias, board6, comments } = rec;
     const b = G.newBoard(), edgePts = [];
     // board outline from Board6 vertices
-    const board6 = get("Board6/Data") ? propsRecords(get("Board6/Data"))[0] || {} : {};
     const outl = [];
     for (let i = 0; board6["VX" + i] !== undefined; i++) {
       const v = [unit(board6["VX" + i]), -unit(board6["VY" + i])];
@@ -198,10 +238,9 @@ globalThis.ImpAltium = (() => {
     b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
     b.vias = vias.map(v => [G.f3(v.x), G.f3(v.y), G.f3(v.d / 2)]);
-    let comments = {}; try { const t6 = get("Texts6/Data"); if (t6) comments = readComments(t6); } catch (e) { /* value text is optional */ }
     const padsByComp = {};
     for (const pd of pads) (padsByComp[pd.comp] ||= []).push(pd);
-    comps.forEach((c, i) => {
+    comps.forEach(c => { const i = c.__i;
       const ref = c.SOURCEDESIGNATOR || c.DESIGNATOR || `?${i}`;
       const side = /^BOTTOM/i.test(c.LAYER || "") ? "B" : "F";
       const x = unit(c.X), y = -unit(c.Y);

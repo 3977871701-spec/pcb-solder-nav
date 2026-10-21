@@ -8,9 +8,10 @@ globalThis.Enrich = (() => {
     5: ["有极性器件", "二极管、LED、电解/钽电容。按卡片里的方向提示放，焊前对一下丝印。双向 TVS 无极性。"],
     6: ["0805 及以上 / 电感 / 其他贴片", "体积较大，散热快，烙铁温度可适当调高。"],
     7: ["按键 / 开关 / 电池座 / 其他机械件", "塑料件怕热，放在贴片最后快速焊完。"],
-    8: ["底面贴片", "顶面焊完再翻面焊。翻面时垫高，别压到顶面器件。"],
-    9: ["插件（最后焊）", "排针、排母、端子、编码器等。从元件面插入，另一面焊接。"],
+    30: ["插件（最后焊）", "排针、排母、端子、编码器等。从元件面插入，另一面焊接。"],
   };
+  // bottom side: same order again after flipping the board (steps 11–17)
+  for (let k = 1; k <= 7; k++) STEPS[10 + k] = ["底面 · " + STEPS[k][0], (k === 1 ? "顶面焊完再翻面焊，翻面时垫高别压到顶面器件。" : "") + STEPS[k][1]];
   const FINE = /QFN|DFN|LGA|BGA|WSON|VSON|USON|XSON|TSON|(^|[^A-Z])SON|QFP|TSSOP|MSOP|SSOP|CSP|LQFN|VQFN|FH\d|FPC|FFC|USB[_-]?C|Type-?C|P0\.[345]\d*mm/i;
   const MID = /SOT|SOIC|(^|_)SOP|ESOP|HSOP|SC-?70|SC-?88|Crystal|Oscillator|TO-2|DPAK|D2PAK|PowerPAK|SMA|SMB|SMC|MELF/i;
   const pkg = fp => (fp.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1] || "";
@@ -41,12 +42,19 @@ globalThis.Enrich = (() => {
     return "";
   }
   function step(p) {
-    if (p.tht) return 9;
-    if (p.s === "B") return 8;
-    const r = p.r.toUpperCase(), fp = p.fp;
+    if (p.tht) return 30;
+    return (p.s === "B" ? 10 : 0) + baseStep(p);
+  }
+  function baseStep(p) {
+    const r = p.r.toUpperCase();
+    // the footprint name is sometimes just a part number (嘉立创 libraries); the supplier footprint field says the package
+    const fp = [p.fp, p.props && (p.props["Supplier Footprint"] || p.props.package || p.props.Package)].filter(Boolean).join(" ");
+    const smdPads = p.pads.filter(q => q[3] === 0).length;
     if (FINE.test(fp)) return 1;
     if (/^(D|LED|ZD|TVS|VD)\d/.test(r) || /^LED/.test(r) || p.pol === "plus1") return 5;
     if (MID.test(fp) && !/^(R|C|L|FB)\d/.test(r)) return 2;
+    if (/^(U|IC)\d/.test(r) && smdPads >= 10) return 1;   // many-pin IC with an unrecognised package name
+    if (/^(U|IC|Q|VT|Y|X|OSC)\d/.test(r) && smdPads >= 3) return 2;
     if (/^(SW|K|S|BT|BAT|BZ|RV|VR|ENC)\d/.test(r)) return 7;
     const k = pkg(fp);
     if (/^(R|C|L|FB|RN|CN)\d/.test(r) || k) {
@@ -85,6 +93,17 @@ globalThis.Enrich = (() => {
   // board = parsed board; bomMap = { ref: {comment,lcsc,mpn} } or null
   function enrich(board, bomMap) {
     const groups = new Map(), dnp = [];
+    // duplicated designators in the design would make one part unreachable: number the repeats Q1, Q1(2), Q1(3)…
+    const seen = {}, dups = {};
+    for (const p of board.parts) {
+      const n = (seen[p.r] = (seen[p.r] || 0) + 1);
+      if (n > 1) { dups[p.r] = n; p.origRef = p.r; p.r = `${p.r}(${n})`; }
+    }
+    if (Object.keys(dups).length) {
+      board.warn = board.warn || [];
+      const list = Object.entries(dups).map(([r, n]) => `${r}×${n}`);
+      board.warn.push(`设计里有重复位号：${list.slice(0, 8).join("、")}${list.length > 8 ? " 等" : ""}，已在后面加 (2)、(3) 区分，焊之前核对一下`);
+    }
     for (const p of board.parts) {
       const b = bomMap && bomMap[p.r];
       if (!p.fp && b && b.fp) p.fp = b.fp; // pick-and-place files often lack the footprint; the BOM has it

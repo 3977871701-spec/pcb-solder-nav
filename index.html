@@ -64,7 +64,13 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .svgwrap { position: relative; height: min(74vh, 820px); touch-action: none; cursor: grab; }
 @media (max-width: 900px) { .svgwrap { height: 62vh; } }
 .svgwrap.drag { cursor: grabbing; }
-svg#board { width: 100%; height: 100%; display: block; user-select: none; }
+.panes { display: flex; height: 100%; }
+.pane { position: relative; flex: 1 1 0; min-width: 0; height: 100%; }
+.pane + .pane { border-left: 2px solid var(--line); }
+@media (max-width: 700px) { .panes { flex-direction: column; } .pane + .pane { border-left: 0; border-top: 2px solid var(--line); } }
+.pane svg { width: 100%; height: 100%; display: block; user-select: none; }
+.ptag { position: absolute; top: 8px; left: 10px; z-index: 2; font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 8px; pointer-events: none; color: var(--fg); }
+.ptag b { color: var(--net); font-weight: 600; }
 .b-fill { fill: var(--board); }
 .b-edge { fill: none; stroke: var(--edge); stroke-width: .25; }
 .trk { fill: none; stroke: var(--track); stroke-linecap: round; }
@@ -242,6 +248,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <option value="none">不标注</option>
       </select>
       <button type="button" class="tbtn" id="trkBtn" aria-pressed="true">走线</button>
+      <button type="button" class="tbtn" id="splitBtn" aria-pressed="false" hidden title="左右分屏同时看顶面和底面（D）">双面对照</button>
       <span class="spacer"></span>
       <button type="button" class="tbtn" id="zin" aria-label="放大">＋</button>
       <button type="button" class="tbtn" id="zout" aria-label="缩小">－</button>
@@ -256,7 +263,10 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <span class="hint" id="hint">滚轮/双指缩放 · 拖动平移</span>
     </div>
     <div class="svgwrap" id="wrap">
-      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="panes">
+        <div class="pane" id="paneA"><span class="ptag" id="tagA">顶面</span><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div class="pane" id="paneB" hidden><span class="ptag" id="tagB">底面（镜像）</span><svg id="board2" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </div>
       <div class="card" id="card" hidden></div>
     </div>
     <div class="legend">
@@ -293,7 +303,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <div class="notes" id="notes" hidden></div>
     <div id="steps" class="side"></div>
     <div class="foot">
-      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
+      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>D</kbd> 双面对照　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
       <p>极性按常见封装库惯例（KiCad、立创、Altium）判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
       <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
     </div>
@@ -631,20 +641,29 @@ globalThis.Tables = (() => {
     let rows = rowsIn ? tryRows(rowsIn) : null;
     if (!rows) rows = tryRows(Files.csv(text));
     if (!rows) rows = tryRows(lines.map(tokens).filter(t => t.length));
-    if (!rows) { // header-less "REF X Y ROT [SIDE]" (Allegro place_txt and similar)
-      const out = [];
+    let header = !!rows;
+    if (!rows) { // header-less "REF X Y ROT [SIDE]" (Allegro place_txt and similar) — must look like a real placement list
+      const out = [], NUM = /^-?\d+(\.\d+)?$/, REF = /^[A-Za-z]{1,4}\d{1,4}[A-Za-z]?$/;
+      let cand = 0;
       for (const l of lines) {
-        const t = tokens(l); if (t.length < 4 || !isRef(t[0])) continue;
-        const x = num(t[1]), y = num(t[2]), r = num(t[3]); if (![x, y, r].every(Number.isFinite)) continue;
+        const t = tokens(l); if (!t.length || /^[#;!*/]|^(uunits|units)/i.test(l.trim())) continue;
+        cand++;
+        if (t.length < 4 || !REF.test(t[0]) || !NUM.test(t[1]) || !NUM.test(t[2]) || !NUM.test(t[3])) continue;
         const sideTok = t.slice(4).find(v => /^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v));
-        out.push({ ref: t[0], x, y, rot: r, side: sideTok ? sideOf(sideTok) : "F", val: "", fp: t.slice(4).find(v => !/^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v)) || "", unit: globalUnit });
+        out.push({ ref: t[0], x: +t[1], y: +t[2], rot: +t[3], side: sideTok ? sideOf(sideTok) : "F", val: "", fp: t.slice(4).find(v => !/^(t|b|top|bottom|m|yes|no|f|front|back)$/i.test(v)) || "", unit: globalUnit });
       }
-      rows = out.length >= 2 ? out : null;
+      const uniq = new Set(out.map(r => r.ref.toUpperCase())).size;
+      rows = out.length >= 3 && out.length >= 0.6 * cand && uniq >= 0.9 * out.length ? out : null;
+    } else {
+      // header found: still reject lists whose "designators" are not designators (e.g. net names) or are mostly repeated
+      const REF = /^[A-Za-z][A-Za-z_]{0,5}\d{1,5}[A-Za-z0-9_]*$/;
+      const ok = rows.filter(r => REF.test(r.ref) && !/^N\d{4,}$/i.test(r.ref)).length, uniq = new Set(rows.map(r => r.ref)).size;
+      if (ok < 0.7 * rows.length || uniq < 0.8 * rows.length) rows = null;
     }
     if (!rows) return null;
     const units = new Set(rows.map(r => r.unit).filter(Boolean));
     const unit = units.size === 1 ? [...units][0] : globalUnit;
-    return { rows: rows.map(r => ({ ...r, x: r.x * UNIT[r.unit || unit || "mm"], y: r.y * UNIT[r.unit || unit || "mm"] })), unit: unit || "mm", explicit: !!unit };
+    return { rows: rows.map(r => ({ ...r, x: r.x * UNIT[r.unit || unit || "mm"], y: r.y * UNIT[r.unit || unit || "mm"] })), unit: unit || "mm", explicit: !!unit, header };
   }
 
   // ---------- IPC-D-356(A) ----------
@@ -1266,9 +1285,11 @@ globalThis.ImpEasyEDA = (() => {
   }
 
   // gather every document from all EasyEDA files of a project and build one board per PCB document
-  function parseProject(texts) {
+  // items: strings or {text, name}; one board per PCB document (multi-board projects keep each board's own title)
+  function parseProject(items) {
     const pool = { foot: {}, dev: {}, pcbs: [] };
-    for (const t of texts) for (const d of docs(t)) {
+    for (const it of items) for (const d of docs(typeof it === "string" ? it : it.text)) {
+      d.src = typeof it === "string" ? "" : it.name || "";
       const type = String(d.head.docType || "").toUpperCase(), uuid = d.head.uuid;
       if (type === "FOOTPRINT") {
         // keep record ids on pads so PAD_NET can match by pad id
@@ -1279,9 +1300,109 @@ globalThis.ImpEasyEDA = (() => {
         if (uuid) pool.dev[uuid] = { attrs: (meta && meta.b && meta.b.attributes) || {}, title: meta && meta.b && meta.b.title };
       } else if (type === "PCB") pool.pcbs.push(d);
     }
-    return pool.pcbs.map(p => ({ board: build(p, pool), title: p.head.title || "", uuid: p.head.uuid, missingFootprints: !Object.keys(pool.foot).length }));
+    return pool.pcbs.map(p => {
+      const meta = p.recs.find(r => r.type === "META"), board = build(p, pool);
+      const withPads = board.parts.filter(q => q.pads.length && q.fp !== "PAD").length, comps = board.parts.filter(q => q.fp !== "PAD").length;
+      return { board, title: (meta && meta.b && meta.b.title) || p.head.title || "", uuid: p.head.uuid, src: p.src, padCoverage: comps ? withPads / comps : 0, comps };
+    });
   }
   return { parseProject, docs, isDoc, pathRuns };
+})();
+
+// ===== import/easyeda_std.js =====
+// 嘉立创EDA标准版 / EasyEDA Standard PCB source (.json, head.docType "3"). Units: 10 mil, Y grows downward.
+globalThis.ImpEasyStd = (() => {
+  const G = Geom, K = 0.254; // 10 mil → mm
+  const isStd = obj => obj && obj.head && String(obj.head.docType) === "3" && Array.isArray(obj.shape);
+  const nums = s => String(s || "").trim().split(/[\s,]+/).filter(Boolean).map(Number);
+  const pairs = a => { const o = []; for (let i = 0; i + 1 < a.length; i += 2) o.push([a[i] * K, a[i + 1] * K]); return o; };
+  // SVG path with absolute M/L/A/Z → point runs (mm)
+  function pathRuns(d) {
+    const tok = String(d || "").match(/[MLAZHVmlazhv]|-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
+    const runs = []; let run = [], cmd = "M", i = 0, cur = [0, 0];
+    const n = () => +tok[i++];
+    while (i < tok.length) {
+      if (/[A-Za-z]/.test(tok[i])) { cmd = tok[i++].toUpperCase(); if (cmd === "Z") { if (run.length) { run.push(run[0]); runs.push(run); run = []; } } continue; }
+      if (cmd === "M") { if (run.length) runs.push(run); cur = [n(), n()]; run = [cur]; cmd = "L"; }
+      else if (cmd === "L") { cur = [n(), n()]; run.push(cur); }
+      else if (cmd === "H") { cur = [n(), cur[1]]; run.push(cur); }
+      else if (cmd === "V") { cur = [cur[0], n()]; run.push(cur); }
+      else if (cmd === "A") {
+        const rx = n(), ry = n(); n(); const large = n(), sweep = n(), x = n(), y = n();
+        const a = cur, b = [x, y], r = Math.max(rx, ry, Math.hypot(b[0] - a[0], b[1] - a[1]) / 2);
+        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1], dd = Math.hypot(dx, dy) || 1e-9;
+        const h = Math.sqrt(Math.max(0, r * r - dd * dd / 4)), sgn = (large === sweep) ? -1 : 1;
+        const c = [mx - dy / dd * h * sgn, my + dx / dd * h * sgn];
+        run.push(...G.arcPts(a, b, c, sweep === 0, 10)); cur = b;
+      } else i++;
+    }
+    if (run.length) runs.push(run);
+    return runs.map(r => r.map(([x, y]) => [x * K, y * K]));
+  }
+  function padRec(f) {
+    // PAD~shape~x~y~w~h~layer~net~number~holeR~points~rotation~id~holeLength~holePoints~plated~…
+    const shape = f[1], x = +f[2] * K, y = +f[3] * K, w = +f[4] * K, h = +f[5] * K, layer = f[6], net = f[7] || "", num = f[8] || "", holeR = +f[9] * K || 0, rot = +f[11] || 0;
+    let polys;
+    const pts = pairs(nums(f[10]));
+    if ((shape === "RECT" || shape === "POLYGON") && pts.length >= 3) polys = [pts];
+    else if (shape === "OVAL" && pts.length === 2) { const r = Math.min(w, h) / 2, [a, b] = pts, L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-9, ang = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+      polys = [G.rrect(L + 2 * r, 2 * r, r, 6).map(([px, py]) => { const q = G.rotK(px, py, -ang); return [q[0] + (a[0] + b[0]) / 2, q[1] + (a[1] + b[1]) / 2]; })]; }
+    else if (shape === "ELLIPSE") polys = [G.circ(x, y, w / 2)];
+    else polys = [G.rect(w, h).map(([px, py]) => { const q = G.rotK(px, py, rot); return [q[0] + x, q[1] + y]; })];
+    const kind = layer === "11" ? (f[15] === "N" ? 2 : 1) : 0;
+    const holeD = holeR > 0 ? G.polyD(G.circ(x, y, holeR, 20).reverse()) : "";
+    return { rec: G.padRec(num, net, polys, kind, holeD), layer };
+  }
+  function parse(obj, fileName) {
+    if (!isStd(obj)) throw new Error("不是嘉立创EDA标准版 PCB 文件");
+    const b = G.newBoard(), edgePts = [], tr = { F: [], B: [] }, silk = { F: [], B: [] };
+    const lineRuns = f => pairs(nums(f));
+    for (const s of obj.shape) {
+      const f = s.split("~"), t = f[0];
+      if (t === "TRACK") {
+        const w = +f[1] * K, L = f[2], pts = lineRuns(f[4]);
+        if (L === "10") { b.edges += G.lineD(pts); edgePts.push(...pts); }
+        else if (L === "1" || L === "2") tr[L === "1" ? "F" : "B"].push([w, G.lineD(pts)]);
+        else if (L === "3" || L === "4") silk[L === "3" ? "F" : "B"].push(G.lineD(pts));
+      } else if (t === "ARC") {
+        const L = f[2], runs = pathRuns(f[4]);
+        if (L === "10") for (const r of runs) { b.edges += G.lineD(r); edgePts.push(...r); }
+        else if (L === "3" || L === "4") for (const r of runs) silk[L === "3" ? "F" : "B"].push(G.lineD(r));
+      } else if (t === "VIA") b.vias.push([G.f3(+f[1] * K), G.f3(+f[2] * K), G.f3(+f[3] * K / 2)]);
+      else if (t === "LIB") {
+        const subs = s.split("#@$"), hf = subs[0].split("~");
+        const attrs = {}; const at = (hf[3] || "").split("`"); for (let i = 0; i + 1 < at.length; i += 2) attrs[at[i]] = at[i + 1];
+        let ref = "", val = "";
+        const pads = [], body = [], sk = []; let padLayer = null;
+        for (const sub of subs.slice(1)) {
+          const g = sub.split("~");
+          if (g[0] === "TEXT" && g[1] === "P") ref = g[10] || ref;
+          else if (g[0] === "TEXT" && g[1] === "N") val = g[10] || val;
+          else if (g[0] === "PAD") { const p = padRec(g); pads.push(p.rec); if (p.layer !== "11") padLayer = p.layer; }
+          else if (g[0] === "TRACK" && (g[2] === "3" || g[2] === "4")) sk.push(G.lineD(lineRuns(g[4])));
+          else if (g[0] === "TRACK" && (g[2] === "99" || g[2] === "13" || g[2] === "14")) body.push(G.lineD(lineRuns(g[4])));
+          else if (g[0] === "CIRCLE" && (g[5] === "3" || g[5] === "4")) sk.push(G.circleD(+g[1] * K, +g[2] * K, +g[3] * K));
+          else if (g[0] === "ARC" && (g[2] === "3" || g[2] === "4")) sk.push(...pathRuns(g[4]).map(G.lineD));
+          else if (g[0] === "SOLIDREGION" && g[1] === "99") body.push(...pathRuns(g[3]).map(r => G.polyD(r)));
+        }
+        if (!ref) continue;
+        const side = (hf[7] === "2" || padLayer === "2") ? "B" : "F";
+        let bb = G.bboxOf(pads.flatMap(p => [[p[7][0], p[7][1]], [p[7][2], p[7][3]]]));
+        const cx = +hf[1] * K, cy = +hf[2] * K;
+        if (!G.validBB(bb)) bb = [cx - .5, cy - .5, cx + .5, cy + .5];
+        const p1 = pads.find(p => p[0] === "1");
+        const props = { ...attrs };
+        if (attrs["BOM_Supplier Part"]) props.LCSC = attrs["BOM_Supplier Part"];
+        if (attrs["BOM_Manufacturer Part"]) props.MPN = attrs["BOM_Manufacturer Part"];
+        b.parts.push({ r: ref, s: side, c: [G.f3(cx), G.f3(cy)], rot: +hf[4] || 0, bb: bb.map(G.f3), pads, body: body.join(""), silk: sk.join(""),
+          val, fp: attrs.package || "", props, sheet: "", p1: p1 ? [p1[4], p1[5]] : null, tht: pads.length && pads.every(p => p[3] !== 0) ? 1 : 0, dnp: 0, nobom: 0 });
+      }
+    }
+    b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
+    b.silk = { F: silk.F.join(""), B: silk.B.join("") };
+    return G.finishBoard(b, edgePts);
+  }
+  return { parse, isStd };
 })();
 
 // ===== import/gerber.js =====
@@ -2047,18 +2168,58 @@ globalThis.ImpAltium = (() => {
     return [local.map(([x, y]) => { const q = G.rotM(x, y, -pd.dir); return [q[0] + pd.x, q[1] + pd.y]; })];
   }
 
-  function parse(u8, fileName) {
+  // ASCII PcbDoc (Protel / Altium ASCII, also what 嘉立创EDA writes when exporting to Altium): one "|RECORD=…|K=V|…" per line
+  function readAscii(text) {
+    const rec = { comps: [], nets: [], pads: [], tracks: [], vias: [], board6: {}, comments: {} };
+    const lay = v => { const s = String(v || "").toUpperCase(); return s === "TOP" ? 1 : s === "BOTTOM" ? 32 : s === "MULTILAYER" ? 74 : s === "TOPOVERLAY" ? 33 : s === "BOTTOMOVERLAY" ? 34 : -1; };
+    const shp = v => { const s = String(v || "").toUpperCase(); return s === "ROUND" ? 1 : s === "OCTAGONAL" ? 3 : 2; };
+    const idx = v => v === undefined || v === "" ? 0xFFFF : +v;
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.startsWith("|")) continue;
+      const o = {}; for (const kv of line.split("|")) { const i = kv.indexOf("="); if (i > 0) o[kv.slice(0, i).trim().toUpperCase()] = kv.slice(i + 1); }
+      const R = (o.RECORD || "").toUpperCase();
+      if (R === "BOARD") rec.board6 = o;
+      else if (R === "COMPONENT") rec.comps.push(o);
+      else if (R === "NET") rec.nets.push(o.NAME || "");
+      else if (R === "PAD") {
+        const rr = (o.SHAPE || "").toUpperCase() === "ROUNDEDRECTANGLE";
+        rec.pads.push({ name: o.NAME || "", layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), x: unit(o.X), y: -unit(o.Y), top: [unit(o.XSIZE || o.TOPXSIZE), unit(o.YSIZE || o.TOPYSIZE)],
+          shape: shp(o.SHAPE || o.TOPSHAPE), dir: +o.ROTATION || 0, hole: unit(o.HOLESIZE), plated: !/^false$/i.test(o.PLATED || "true"), altShape: rr ? 9 : null, radius: rr ? +(o.CORNERRADIUS || o.CRPERCENTAGE || 50) : null });
+      } else if (R === "TRACK") rec.tracks.push({ layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), pts: [[unit(o.X1), -unit(o.Y1)], [unit(o.X2), -unit(o.Y2)]], w: unit(o.WIDTH) });
+      else if (R === "ARC") {
+        const c = [unit(o.LOCATION_X || o.X), -unit(o.LOCATION_Y || o.Y)], rad = unit(o.RADIUS), sa = +o.STARTANGLE || 0, ea = +o.ENDANGLE || 0;
+        let span = ((ea - sa) % 360 + 360) % 360; if (span === 0) span = 360; const n = Math.max(2, Math.ceil(span / 10)), pts = [];
+        for (let k = 0; k <= n; k++) { const t = (sa + span * k / n) * Math.PI / 180; pts.push([c[0] + rad * Math.cos(t), c[1] - rad * Math.sin(t)]); }
+        rec.tracks.push({ layer: lay(o.LAYER), net: idx(o.NET), comp: idx(o.COMPONENT), pts, w: unit(o.WIDTH) });
+      } else if (R === "VIA") rec.vias.push({ x: unit(o.X), y: -unit(o.Y), d: unit(o.DIAMETER), net: idx(o.NET) });
+      else if (R === "TEXT" && /^true$/i.test(o.COMMENT || o.ISCOMMENT || "") && o.COMPONENT !== undefined) rec.comments[+o.COMPONENT] = o.TEXT || "";
+    }
+    // components are referenced by order of appearance (ID when present)
+    rec.comps = rec.comps.map((c, i) => ({ ...c, __i: c.ID !== undefined ? +c.ID : i }));
+    return rec;
+  }
+  function readBinary(u8) {
     const fs = cfb(u8);
     const get = n => { const k = Object.keys(fs).find(p => p.toLowerCase() === n.toLowerCase()); return k ? fs[k]() : null; };
     const compsRaw = get("Components6/Data"); if (!compsRaw) throw new Error("PcbDoc 里没有 Components6（可能是 PcbLib 或旧版本格式）");
-    const comps = propsRecords(compsRaw);
-    const nets = (get("Nets6/Data") ? propsRecords(get("Nets6/Data")) : []).map(o => o.NAME || "");
-    const pads = get("Pads6/Data") ? readPads(get("Pads6/Data")) : [];
-    const tracks = (get("Tracks6/Data") ? readTracks(get("Tracks6/Data")) : []).concat(get("Arcs6/Data") ? readArcs(get("Arcs6/Data")) : []);
-    const vias = get("Vias6/Data") ? readVias(get("Vias6/Data")) : [];
+    let comments = {}; try { const t6 = get("Texts6/Data"); if (t6) comments = readComments(t6); } catch (e) { /* value text is optional */ }
+    return {
+      comps: propsRecords(compsRaw).map((c, i) => ({ ...c, __i: i })),
+      nets: (get("Nets6/Data") ? propsRecords(get("Nets6/Data")) : []).map(o => o.NAME || ""),
+      pads: get("Pads6/Data") ? readPads(get("Pads6/Data")) : [],
+      tracks: (get("Tracks6/Data") ? readTracks(get("Tracks6/Data")) : []).concat(get("Arcs6/Data") ? readArcs(get("Arcs6/Data")) : []),
+      vias: get("Vias6/Data") ? readVias(get("Vias6/Data")) : [],
+      board6: get("Board6/Data") ? propsRecords(get("Board6/Data"))[0] || {} : {},
+      comments,
+    };
+  }
+  function parse(u8, fileName) {
+    let rec;
+    if (u8[0] === 0xD0 && u8[1] === 0xCF) rec = readBinary(u8);
+    else { const head = latin.decode(u8.subarray(0, 64)); if (!/^\|RECORD=/i.test(head.trim())) throw new Error("不是 Altium PcbDoc（既不是二进制也不是 ASCII 格式）"); rec = readAscii(latin.decode(u8)); }
+    const { comps, nets, pads, tracks, vias, board6, comments } = rec;
     const b = G.newBoard(), edgePts = [];
     // board outline from Board6 vertices
-    const board6 = get("Board6/Data") ? propsRecords(get("Board6/Data"))[0] || {} : {};
     const outl = [];
     for (let i = 0; board6["VX" + i] !== undefined; i++) {
       const v = [unit(board6["VX" + i]), -unit(board6["VY" + i])];
@@ -2082,10 +2243,9 @@ globalThis.ImpAltium = (() => {
     b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
     b.vias = vias.map(v => [G.f3(v.x), G.f3(v.y), G.f3(v.d / 2)]);
-    let comments = {}; try { const t6 = get("Texts6/Data"); if (t6) comments = readComments(t6); } catch (e) { /* value text is optional */ }
     const padsByComp = {};
     for (const pd of pads) (padsByComp[pd.comp] ||= []).push(pd);
-    comps.forEach((c, i) => {
+    comps.forEach(c => { const i = c.__i;
       const ref = c.SOURCEDESIGNATOR || c.DESIGNATOR || `?${i}`;
       const side = /^BOTTOM/i.test(c.LAYER || "") ? "B" : "F";
       const x = unit(c.X), y = -unit(c.Y);
@@ -2116,7 +2276,7 @@ globalThis.ImpAltium = (() => {
 // ===== core/project.js =====
 // Turns a pile of dropped files (folders, zips, mixed EDA outputs) into boards.
 globalThis.Project = (() => {
-  const SKIP = /(^|\/)(__MACOSX|\.history|\.git|node_modules|\.svn)(\/|$)|(^|\/)\._|(^|\/)~\$/;
+  const SKIP = /(^|\/)(__MACOSX|\.history|\.git|node_modules|\.svn|\.venv|venv|site-packages|__pycache__|\.idea|\.vscode)(\/|$)|(^|\/)\._|(^|\/)~\$/;
   const dirOf = p => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
   const baseOf = p => p.split("/").pop();
   const stemOf = p => baseOf(p).replace(/\.[^.]+$/, "");
@@ -2152,6 +2312,7 @@ globalThis.Project = (() => {
     if (e.error) return { kind: "error" };
     if (x === "kicad_pcb") return { kind: "kicad" };
     if (x === "pcbdoc") return { kind: "altium" };
+    if (x === "eprj2" || x === "eprj") return { kind: "unsupported", why: "嘉立创EDA本地工程库（.eprj2）暂不能直接读，请在嘉立创EDA里用“文件 → 导出 → 工程”导出 .epro2 再拖进来" };
     if (x === "brd" || x === "mcm" || x === "sip") return { kind: "unsupported", why: "Cadence Allegro .brd 是加密的二进制格式，请导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356" };
     if (x === "pcb" && /pads/i.test(name)) return { kind: "unsupported", why: "PADS 原文件请先导出 IPC-2581 或 ODB++" };
     if (/^(xls|doc|docx|pdf|png|jpg|jpeg|webp|step|stp|wrl|dxf|dwg|kicad_sch|kicad_pro|kicad_prl|schdoc|prjpcb|dsn|olb|lib|bak|log|jrl)$/.test(x)) return { kind: "ignore" };
@@ -2168,6 +2329,7 @@ globalThis.Project = (() => {
     if (/<IPC-2581[\s>]/.test(head)) return { kind: "ipc2581", text: () => Files.decodeText(u8) };
     if (/^\s*\(kicad_pcb/.test(head)) return { kind: "kicad", text: () => Files.decodeText(u8) };
     if (x === "json" && /"lengthUnit"|FlyingProbe/i.test(head + name)) return { kind: "fly", text: () => Files.decodeText(u8) };
+    if (x === "json" && /"docType"\s*:\s*"3"/.test(head) && /"shape"\s*:/.test(Files.decodeText(u8.subarray(0, 300000)))) return { kind: "easystd", text: () => Files.decodeText(u8) };
     if (/^(P  |C  )/m.test(head) && /^(317|327)/m.test(Files.decodeText(u8.subarray(0, 200000)))) return { kind: "ipc356", text: () => Files.decodeText(u8) };
     if (ImpGerber.isDrill(head) && !/%FS/.test(head)) return { kind: "drill", text: () => Files.decodeText(u8) };
     if (ImpGerber.isGerber(head) && (GERBER_EXT.test(x) || /%FS/.test(head))) return { kind: "gerber", text: () => Files.decodeText(u8), role: ImpGerber.role(e.path, head) };
@@ -2175,9 +2337,16 @@ globalThis.Project = (() => {
     return { kind: "ignore" };
   }
 
+  // board name from its folder, skipping generic folder names like gerber/fab/output
+  const GENERIC = /^(gerbers?|fab|fabrication|output|outputs?|out|cam|manufacturing|production|work|tmp|temp|release|smt|assembly|生产文件|嘉立创生产文件|打板|打板参考|制板文件|光绘)$/i;
+  function niceName(d, fallback) {
+    const parts = d.split("/").filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) if (!GENERIC.test(parts[i])) return parts[i].replace(/^gerber[_-]?/i, "") || parts[i];
+    return stemOf(fallback || "board");
+  }
   async function load(entries, onProgress = () => {}) {
     const files = await expand(entries);
-    const errors = [], notes = [];
+    const errors = [], notes = [], skipped = {};
     const C = [];
     let i = 0;
     for (const f of files) {
@@ -2185,10 +2354,11 @@ globalThis.Project = (() => {
       if (++i % 20 === 0) onProgress(`正在识别文件 ${i}/${files.length}`);
       const c = await classify(f);
       c.path = f.path; c.dir = dirOf(f.path); c.entry = f;
-      if (c.kind === "unsupported") notes.push(`${f.path}：${c.why}`);
+      if (c.kind === "unsupported") (skipped[c.why] ||= []).push(f.path);
       if (c.kind === "error") errors.push(`${f.path}：${c.why || "读取失败"}`);
       C.push(c);
     }
+    for (const [why, list] of Object.entries(skipped)) notes.push(list.length === 1 ? `${list[0]}：${why}` : `跳过 ${list.length} 个文件（${list.slice(0, 2).map(baseOf).join("、")} 等）：${why}`);
     // tables → BOM / CPL
     const tables = [];
     for (const c of C.filter(c => c.kind === "table" || c.kind === "xlsx")) {
@@ -2223,17 +2393,24 @@ globalThis.Project = (() => {
     // EasyEDA: group docs by archive / directory
     const ee = {};
     for (const c of C.filter(c => c.kind === "easyeda")) (ee[c.entry.inArchive || c.dir] ||= []).push(c);
+    const noFoot = [];
     for (const [grp, list] of Object.entries(ee)) {
       try {
-        const res = ImpEasyEDA.parseProject(list.map(c => c.text()));
-        for (const r of res) {
-          if (!r.board.parts.length) continue;
-          const nameBase = stemOf(list.find(c => /\.(epru|epcb)$/i.test(c.path))?.path || grp || "easyeda");
-          if (r.board.parts.every(p => !p.pads.length)) notes.push(`${grp || nameBase}：只有 PCB 文档，缺少封装数据。请在嘉立创EDA里用“文件 → 导出 → 工程（.epro）”导出完整工程再拖进来。`);
-          add(r.board, { path: grp + "#" + (r.uuid || ""), name: res.length > 1 ? `${nameBase}-${r.title || r.uuid}` : nameBase, source: "嘉立创EDA专业版" });
+        const res = ImpEasyEDA.parseProject(list.map(c => ({ text: c.text(), name: c.path })));
+        const proj = stemOf(grp || "easyeda").replace(/^ProPrj_/, "").replace(/_\d{4}-\d{2}-\d{2}$/, "");
+        const good = res.filter(r => r.comps && r.padCoverage >= 0.5);
+        for (const r of res) if (r.comps && r.padCoverage < 0.5) noFoot.push(r.src || grp); // PCB without its footprints (bare .epcb snapshot)
+        for (const r of good) {
+          const own = r.title && !/^PCB\d*$/i.test(r.title) ? r.title : stemOf(r.src || grp || "easyeda");
+          add(r.board, { path: (r.src || grp) + "#" + (r.uuid || ""), name: good.length > 1 ? `${proj} · ${own}` : own, source: "嘉立创EDA专业版" });
         }
         designDirs.push(dirOf(list[0].path));
       } catch (err) { errors.push(`${grp}：${err.message}`); }
+    }
+    if (noFoot.length) notes.push(`${noFoot.length} 个嘉立创 PCB 文档缺少封装数据（例如 ${baseOf(noFoot[0])}），已跳过。请在嘉立创EDA里用“文件 → 导出 → 工程”导出完整的 .epro2 再拖进来。`);
+    for (const c of C.filter(c => c.kind === "easystd")) {
+      try { add(ImpEasyStd.parse(JSON.parse(c.text()), baseOf(c.path)), { path: c.path, name: stemOf(c.path).replace(/^PCB_(PCB_)?/, ""), source: "嘉立创EDA标准版" }); designDirs.push(c.dir); }
+      catch (err) { errors.push(`${c.path}：${err.message}`); }
     }
     // ODB++
     if (globalThis.ImpODB) {
@@ -2269,19 +2446,33 @@ globalThis.Project = (() => {
       const nt = near(d, nets.map(c => ({ c })));
       let net = null;
       for (const t of nt) { try { if (t.c.kind === "fly") { const f = Tables.flyprobe(t.c.text()); if (f) { net = { pads: f.pads, comps: f.comps, source: "飞针测试文件" }; break; } } else { const p = Tables.ipc356(t.c.text()); if (p) { net = { pads: p, source: "IPC-356" }; break; } } } catch (e) {} }
-      const cpls = near(d, tables.filter(t => t.type === "cpl"));
-      const cpl = cpls.length ? cpls[0].cpl : null;
-      cpls.forEach(t => usedTables.add(t));
+      // candidate placement files anywhere under the parent / grandparent folder: try each, keep the one that fits the copper best
+      const allCpl = tables.filter(t => t.type === "cpl");
+      let cands = [];
+      for (const root of [d, dirOf(d), dirOf(dirOf(d))]) { cands = allCpl.filter(t => isAncestor(root, t.c.dir)); if (cands.length) break; if (root === "") break; }
+      const hint = t => /cpl|pick|place|pnp|pos|-pos|坐标|centroid|xy|smt|mount|贴片/i.test(baseOf(t.c.path)) ? 0 : 0.25;
       const bomNear = near(d, tables.filter(t => t.type === "bom"));
-      const b = ImpFab.build({ layers, holes, cpl, net, bom: bomNear.length ? bomNear[0].bom : null });
+      const bomMap = bomNear.length ? bomNear[0].bom : null;
+      let b = null, cpl = null, bestScore = 1e9, bestT = null;
+      for (const t of cands.slice(0, 8)) {
+        const bb = ImpFab.build({ layers, holes, cpl: t.cpl, net, bom: bomMap });
+        const score = (bb.align ? bb.align.res : 5) + hint(t) + (t.cpl.header ? 0 : 0.1);
+        if (score < bestScore) { bestScore = score; b = bb; cpl = t.cpl; bestT = t; }
+      }
+      if (bestT && bestScore > 1.5 && !net) { b = null; cpl = null; bestT = null; } // nothing fits: better no placement than a wrong one
+      if (bestT) usedTables.add(bestT);
+      if (!b) b = ImpFab.build({ layers, holes, cpl: null, net, bom: bomMap });
       if (!b.parts.length) { notes.push(`${d || "根目录"}：找到 Gerber，但没有坐标文件或网表，无法确定器件。请一起拖入坐标文件（Pick and Place / CPL）。`); continue; }
-      const nm = baseOf(d) || stemOf(gl[0].path);
       const parts = ["Gerber"]; if (cpl) parts.push("坐标文件"); if (net) parts.push(net.source);
-      add(b, { path: d + "#fab", name: nm.replace(/^gerber[_-]?/i, "") || nm, source: parts.join(" + ") });
+      add(b, { path: d + "#fab", name: niceName(d, gl[0].path), source: parts.join(" + ") });
     }
-    // CPL with no Gerber next to it: placement-only board
+    // CPL with no Gerber anywhere near it: placement-only board (only for files that clearly are placement lists)
     for (const t of tables.filter(t => t.type === "cpl" && !usedTables.has(t))) {
-      if (covered(t.c.dir) || gdirs.some(d => isAncestor(t.c.dir, d) || isAncestor(d, t.c.dir))) continue;
+      if (!/cpl|pick|place|pnp|pos|坐标|centroid|\bxy\b|smt|贴片/i.test(baseOf(t.c.path))) continue; // only files named like placement lists
+      const xs = t.cpl.rows.map(r => r.x), ys = t.cpl.rows.map(r => r.y);
+      if (Math.max(...xs) - Math.min(...xs) > 600 || Math.max(...ys) - Math.min(...ys) > 600) continue; // not board coordinates
+      const area = dirOf(t.c.dir);
+      if (covered(t.c.dir) || gdirs.some(d => isAncestor(t.c.dir, d) || isAncestor(d, t.c.dir) || isAncestor(area, d))) continue;
       const nt = near(t.c.dir, nets.map(c => ({ c })));
       let net = null; for (const n of nt) { try { net = n.c.kind === "fly" ? (x => x && { pads: x.pads, comps: x.comps })(Tables.flyprobe(n.c.text())) : { pads: Tables.ipc356(n.c.text()) }; if (net && net.pads) break; } catch (e) {} }
       const b = ImpFab.build({ layers: {}, holes: [], cpl: t.cpl, net });
@@ -2298,7 +2489,7 @@ globalThis.Project = (() => {
       const hit = common.filter(r => Math.hypot(t.pos[r][0] - s.pos[r][0] - ox, t.pos[r][1] - s.pos[r][1] - oy) < 0.6).length;
       return hit >= 0.7 * common.length;
     };
-    const rank = b => b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2;
+    const rank = b => (b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2) - (/(^|\/)(work|tmp|temp|backup|old|review|snapshots?|sim)(\/|#|$)/i.test(b.path) ? 0.5 : 0);
     const keep = [];
     for (const b of boards.slice().sort((x, y) => rank(y) - rank(x))) {
       const s = sig(b);
@@ -2306,7 +2497,12 @@ globalThis.Project = (() => {
       if (dup) { if (rank(b) < 2 && rank(dup) === 2) notes.push(`${b.path.replace(/#.*$/, "")}：和原生设计文件 ${baseOf(dup.path.replace(/#.*$/, ""))} 是同一块板，已使用原生文件`); continue; }
       keep.push(b);
     }
-    boards.length = 0; boards.push(...keep.sort((x, y) => x.path.localeCompare(y.path)));
+    // exact copies (same placement) collapse silently; different revisions with the same name get their folder appended
+    const exact = new Set(), uniq = [];
+    for (const b of keep) { const k = b.board.parts.map(p => p.r + ":" + p.c.join(",")).sort().join("|"); if (exact.has(k)) continue; exact.add(k); uniq.push(b); }
+    const count = {}; for (const b of uniq) count[b.name] = (count[b.name] || 0) + 1;
+    for (const b of uniq) if (count[b.name] > 1) { const dir = baseOf(dirOf(b.path.replace(/#.*$/, ""))); if (dir) b.name = `${b.name}（${dir}）`; }
+    boards.length = 0; boards.push(...uniq.sort((x, y) => x.path.localeCompare(y.path)));
 
     // ---- attach BOMs ----
     const boms = tables.filter(t => t.type === "bom");
@@ -2318,9 +2514,12 @@ globalThis.Project = (() => {
       const stem = (bd.name || "").toLowerCase();
       cands.sort((a, b) => (baseOf(b.c.path).toLowerCase().includes(stem) - baseOf(a.c.path).toLowerCase().includes(stem)));
       const refs = new Set(bd.board.parts.map(p => p.r));
-      const pick = cands.find(t => Object.keys(t.bom).filter(r => refs.has(r)).length >= Math.min(3, refs.size)) || null;
+      // a BOM belongs to a board only if most of its designators exist on the board and it covers a good part of the board
+      const real = Math.max(1, [...refs].filter(r => !/^(TP|MH|H|FID|MARK|PAD)\d/i.test(r)).length);
+      const fit = t => { const keys = Object.keys(t.bom), hit = keys.filter(r => refs.has(r)).length; return hit >= 0.8 * keys.length && hit >= 0.5 * real ? hit : 0; };
+      const pick = cands.filter(fit).sort((a, b) => fit(b) - fit(a))[0] || null;
       bd.bom = pick ? pick.bom : null; bd.bomFile = pick ? baseOf(pick.c.path) : "";
-      if (!pick) { const fromCpl = tables.find(t => t.type === "bomFromCpl" && (t.c.dir === dd || isAncestor(dd, t.c.dir))); if (fromCpl) { bd.bom = fromCpl.bom; bd.bomFile = baseOf(fromCpl.c.path); } }
+      if (!pick) { const fromCpl = tables.find(t => t.type === "bomFromCpl" && (t.c.dir === dd || isAncestor(dd, t.c.dir)) && fit(t)); if (fromCpl) { bd.bom = fromCpl.bom; bd.bomFile = baseOf(fromCpl.c.path); } }
     }
     if (!boards.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子文件。支持：KiCad .kicad_pcb、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
     return { boards, errors, notes };
@@ -2339,9 +2538,10 @@ globalThis.Enrich = (() => {
     5: ["有极性器件", "二极管、LED、电解/钽电容。按卡片里的方向提示放，焊前对一下丝印。双向 TVS 无极性。"],
     6: ["0805 及以上 / 电感 / 其他贴片", "体积较大，散热快，烙铁温度可适当调高。"],
     7: ["按键 / 开关 / 电池座 / 其他机械件", "塑料件怕热，放在贴片最后快速焊完。"],
-    8: ["底面贴片", "顶面焊完再翻面焊。翻面时垫高，别压到顶面器件。"],
-    9: ["插件（最后焊）", "排针、排母、端子、编码器等。从元件面插入，另一面焊接。"],
+    30: ["插件（最后焊）", "排针、排母、端子、编码器等。从元件面插入，另一面焊接。"],
   };
+  // bottom side: same order again after flipping the board (steps 11–17)
+  for (let k = 1; k <= 7; k++) STEPS[10 + k] = ["底面 · " + STEPS[k][0], (k === 1 ? "顶面焊完再翻面焊，翻面时垫高别压到顶面器件。" : "") + STEPS[k][1]];
   const FINE = /QFN|DFN|LGA|BGA|WSON|VSON|USON|XSON|TSON|(^|[^A-Z])SON|QFP|TSSOP|MSOP|SSOP|CSP|LQFN|VQFN|FH\d|FPC|FFC|USB[_-]?C|Type-?C|P0\.[345]\d*mm/i;
   const MID = /SOT|SOIC|(^|_)SOP|ESOP|HSOP|SC-?70|SC-?88|Crystal|Oscillator|TO-2|DPAK|D2PAK|PowerPAK|SMA|SMB|SMC|MELF/i;
   const pkg = fp => (fp.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1] || "";
@@ -2372,12 +2572,19 @@ globalThis.Enrich = (() => {
     return "";
   }
   function step(p) {
-    if (p.tht) return 9;
-    if (p.s === "B") return 8;
-    const r = p.r.toUpperCase(), fp = p.fp;
+    if (p.tht) return 30;
+    return (p.s === "B" ? 10 : 0) + baseStep(p);
+  }
+  function baseStep(p) {
+    const r = p.r.toUpperCase();
+    // the footprint name is sometimes just a part number (嘉立创 libraries); the supplier footprint field says the package
+    const fp = [p.fp, p.props && (p.props["Supplier Footprint"] || p.props.package || p.props.Package)].filter(Boolean).join(" ");
+    const smdPads = p.pads.filter(q => q[3] === 0).length;
     if (FINE.test(fp)) return 1;
     if (/^(D|LED|ZD|TVS|VD)\d/.test(r) || /^LED/.test(r) || p.pol === "plus1") return 5;
     if (MID.test(fp) && !/^(R|C|L|FB)\d/.test(r)) return 2;
+    if (/^(U|IC)\d/.test(r) && smdPads >= 10) return 1;   // many-pin IC with an unrecognised package name
+    if (/^(U|IC|Q|VT|Y|X|OSC)\d/.test(r) && smdPads >= 3) return 2;
     if (/^(SW|K|S|BT|BAT|BZ|RV|VR|ENC)\d/.test(r)) return 7;
     const k = pkg(fp);
     if (/^(R|C|L|FB|RN|CN)\d/.test(r) || k) {
@@ -2416,6 +2623,17 @@ globalThis.Enrich = (() => {
   // board = parsed board; bomMap = { ref: {comment,lcsc,mpn} } or null
   function enrich(board, bomMap) {
     const groups = new Map(), dnp = [];
+    // duplicated designators in the design would make one part unreachable: number the repeats Q1, Q1(2), Q1(3)…
+    const seen = {}, dups = {};
+    for (const p of board.parts) {
+      const n = (seen[p.r] = (seen[p.r] || 0) + 1);
+      if (n > 1) { dups[p.r] = n; p.origRef = p.r; p.r = `${p.r}(${n})`; }
+    }
+    if (Object.keys(dups).length) {
+      board.warn = board.warn || [];
+      const list = Object.entries(dups).map(([r, n]) => `${r}×${n}`);
+      board.warn.push(`设计里有重复位号：${list.slice(0, 8).join("、")}${list.length > 8 ? " 等" : ""}，已在后面加 (2)、(3) 区分，焊之前核对一下`);
+    }
     for (const p of board.parts) {
       const b = bomMap && bomMap[p.r];
       if (!p.fp && b && b.fp) p.fp = b.fp; // pick-and-place files often lack the footprint; the BOM has it
@@ -2511,19 +2729,24 @@ async function ingest(list) {
   try { res = await Project.load(list, msg => { $("#loadMsg").textContent = msg; }); }
   catch (e) { toast("读取失败：" + e.message, 6000); $("#loadMsg").textContent = ""; return; }
   $("#loadMsg").textContent = "";
-  let firstKey = null;
+  let firstKey = null; const added = [];
+  // re-importing a folder replaces everything that earlier imports of that folder produced
+  const roots = new Set(list.map(e => e.path.split("/")[0]).filter((r, _, a) => list.some(e => e.path.includes("/"))));
   for (const m of res.boards) {
     const b = m.board;
     Enrich.enrich(b, m.bom);
+    if (!b.groups.length && !b.dnp.length) { res.notes.push(`${m.path.replace(/#.*$/, "")}：里面没有需要焊接的器件（可能只是封装库或板框），已跳过`); continue; }
     Object.assign(b, { name: m.name, sub: m.source, source: m.source, bomFile: m.bomFile || "", file: m.path.replace(/#.*$/, "").split("/").pop(), added: Date.now(), warn: b.warn || [] });
     b.key = boardKey(m, b);
     const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source));
     if (old >= 0) { if (S.boards[old].key !== b.key) DB.del(S.boards[old].key); S.boards[old] = b; } else S.boards.push(b);
-    DB.put(b); firstKey ||= b.key;
+    DB.put(b); firstKey ||= b.key; added.push(b.key);
   }
+  const newKeys = new Set(added);
+  if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) { DB.del(old.key); S.boards = S.boards.filter(x => x !== old); }
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   showNotes(msgs);
-  if (firstKey) { toast(`读入 ${res.boards.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  if (firstKey) { toast(`读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
   else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
 }
 function showNotes(msgs) {
@@ -2623,8 +2846,8 @@ $("#loadDemo").onclick = () => {
 };
 
 // ---------- view transform (mirror for bottom, rotate in 90° steps) ----------
-function view() {
-  const [x0, y0, x1, y1] = S.b.bbox, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, B = S.side === "B", r = S.rot;
+function view(side = S.side) {
+  const [x0, y0, x1, y1] = S.b.bbox, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, B = side === "B", r = S.rot;
   const a = r * Math.PI / 180, c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
   const vec = (dx, dy) => { if (B) dx = -dx; return [dx * c - dy * s, dx * s + dy * c]; };
   const pt = (x, y) => { const v = vec(x - cx, y - cy); return [cx + v[0], cy + v[1]]; };
@@ -2633,6 +2856,32 @@ function view() {
   return { tf, pt, vec, up };
 }
 const onSide = (p, side) => p.tht || p.s === side;
+
+// two drawing panes: A is the normal view; in double-sided pin testing A shows the top and B the (mirrored) bottom
+const PANES = [
+  { svg: $("#board"), box: $("#paneA"), tag: $("#tagA"), key: "vb", side: "F", world: null },
+  { svg: $("#board2"), box: $("#paneB"), tag: $("#tagB"), key: "vb2", side: "B", world: null },
+];
+const P0 = PANES[0];
+const paneOf = target => (target && PANES.find(P => P.box.contains(target))) || P0;
+function selectedNet() { const pd = S.mode === "pin" && S.pad ? S.pm[S.pad.r]?.pads[S.pad.i] : null; return pd && pd[1] ? pd[1] : null; }
+const isThruPad = x => { const p = S.pm[x.r]; return p && (p.tht || p.pads[x.i][3] === 1); };
+// pads of the selected net on each side (through-hole pads count for both)
+function netSides(net) {
+  const out = { F: 0, B: 0 };
+  for (const x of S.netIdx[net] || []) { const p = S.pm[x.r]; if (!p) continue; if (isThruPad(x)) { out.F++; out.B++; } else out[p.s]++; }
+  return out;
+}
+// split when the selected net cannot be seen from one side alone
+function wantSplit() {
+  if (S.mode !== "pin") return false;
+  if (S.splitForce) return true;
+  const net = selectedNet(); if (!net) return false;
+  const all = S.netIdx[net] || [];
+  const smd = s => all.some(x => !isThruPad(x) && S.pm[x.r] && S.pm[x.r].s === s);
+  const tht = all.some(isThruPad);
+  return smd("B") && (smd("F") || tht);
+}
 
 function dirWord(dx, dy) {
   if (Math.hypot(dx, dy) < 0.05) return "中间";
@@ -2643,8 +2892,9 @@ function orientText(p) {
   if (p.pol === "none-bi") return "双向 TVS，无极性，两个方向都行";
   if (p.pol && !p.p1) return `有极性，但这份数据没有引脚编号：方向请对照板上丝印${p.rot ? `（坐标文件角度 ${p.rot}°）` : ""}`;
   if (!p.pol) return "无极性";
-  const v = view().vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
-  const where = `（当前${S.side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
+  const side = S.split ? (p.tht ? "F" : p.s) : S.side;
+  const v = view(side).vec(p.p1[0] - p.c[0], p.p1[1] - p.c[1]), w = dirWord(v[0], v[1]);
+  const where = `（${side === "B" ? "底面" : "顶面"}视图${S.rot ? `，已转 ${S.rot}°` : ""}）`;
   if (p.pol === "k1") return `阴极 K 在${w}侧：器件色带/横线朝${w}${where}`;
   if (p.pol === "plus1") return `正极 + 在${w}侧${where}`;
   return `1 脚在${w}${w.length === 1 ? "侧" : "角"}：对准芯片圆点/缺角${where}`;
@@ -2653,28 +2903,41 @@ function orientText(p) {
 function shortVal(p) { const s = (p.val && p.val !== "~" ? p.val : p.nm || "").split(/\s+/)[0]; return s.length > 10 ? s.slice(0, 9) + "…" : s; }
 
 function render() {
-  const b = S.b, svg = $("#board"), V = view();
+  const split = wantSplit(), was = !!S.split;
+  S.split = split;
+  PANES[1].box.hidden = !split;
+  $("#splitBtn").setAttribute("aria-pressed", split);
+  if (split) { P0.side = "F"; PANES[1].side = "B"; } else P0.side = S.side;
+  if (split !== was) { S.vb = null; S.vb2 = null; }
+  const net = selectedNet(), ns = net ? netSides(net) : null;
+  for (const P of split ? PANES : [P0]) {
+    renderPane(P);
+    P.tag.innerHTML = (P.side === "B" ? "底面（镜像）" : "顶面") + (ns ? ` · 同网络 <b>${P.side === "B" ? ns.B : ns.F}</b> 个焊盘` : "");
+  }
+  P0.tag.hidden = !split && S.mode !== "pin";
+}
+function renderPane(P) {
+  const b = S.b, svg = P.svg, side = P.side, V = view(side);
   svg.innerHTML = "";
   svg.classList.toggle("pinmode", S.mode === "pin");
   const [x0, y0, x1, y1] = b.bbox;
-  const world = el("g", { transform: V.tf }, svg); S.worldEl = world;
+  const world = el("g", { transform: V.tf }, svg); P.world = world;
   el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: .8, class: "b-fill" }, world);
   if (S.trk) {
-    for (const [w, d] of b.tracks[S.side]) el("path", { d, class: "trk", "stroke-width": w }, world);
+    for (const [w, d] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, world);
     for (const [vx, vy, vr] of b.vias) el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, world);
   }
-  if (b.silk[S.side]) el("path", { d: b.silk[S.side], class: "bsilk" }, world);
+  if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));
-  const selPad = pin && S.pad ? S.pm[S.pad.r]?.pads[S.pad.i] : null;
-  const selNet = selPad && selPad[1] ? selPad[1] : null;
+  const selNet = selectedNet();
   const netRefs = new Set(selNet ? (S.netIdx[selNet] || []).map(x => x.r) : []);
   if (pin && S.cur) netRefs.add(S.cur);
-  const root = svg; if (selRefs.size || netRefs.size) world.classList.add("dim");
+  if (selRefs.size || netRefs.size) world.classList.add("dim");
   const parts = el("g", {}, world), labels = el("g", {}, world), pnums = el("g", {}, world), rings = el("g", {}, world);
   for (const p of b.parts) {
-    if (!onSide(p, S.side)) continue;
+    if (!onSide(p, side)) continue;
     const g = el("g", { class: "part" + (p.tp ? " tp" : "") + (p.dnp ? " dnp" : "") + (done[p.r] && !pin ? " done" : "") + (selRefs.has(p.r) ? " hi" : "") + (netRefs.has(p.r) ? " nhi" : "") + (S.cur === p.r ? " cur" : ""), "data-r": p.r }, parts);
     if (p.body) el("path", { d: p.body, class: "body" }, g);
     if (p.silk && !p.tp) el("path", { d: p.silk, class: "sk" }, g);
@@ -2703,47 +2966,61 @@ function render() {
     t.textContent = S.lbl === "val" && !pin ? shortVal(p) : p.r + (p.dnp ? " DNP" : "");
     if (hi) el("circle", { cx, cy, r: Math.max(w, h) / 2 + .9, class: "ring" + (S.cur === p.r ? " cur" : "") }, rings);
   }
-  setVB(S.vb);
+  setVB(S[P.key], P);
 }
 
-// ---------- pan / zoom ----------
-function fitVB() {
-  const V = view(), [x0, y0, x1, y1] = S.b.bbox, c = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(q => V.pt(q[0], q[1]));
+// ---------- pan / zoom (per pane) ----------
+function fitVB(P = P0) {
+  const V = view(P.side), [x0, y0, x1, y1] = S.b.bbox, c = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(q => V.pt(q[0], q[1]));
   const xs = c.map(q => q[0]), ys = c.map(q => q[1]), m = 3;
   return { x: Math.min(...xs) - m, y: Math.min(...ys) - m, w: Math.max(...xs) - Math.min(...xs) + 2 * m, h: Math.max(...ys) - Math.min(...ys) + 2 * m };
 }
-function setVB(v) { S.vb = v || fitVB(); $("#board").setAttribute("viewBox", `${S.vb.x} ${S.vb.y} ${S.vb.w} ${S.vb.h}`); }
-function zoomAt(f, px, py) {
-  const v = S.vb, r = $("#board").getBoundingClientRect();
+function setVB(v, P = P0) { const vb = S[P.key] = v || fitVB(P); P.svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+function zoomAt(f, px, py, P = P0) {
+  const v = S[P.key] || fitVB(P), r = P.svg.getBoundingClientRect();
   const s = Math.min(r.width / v.w, r.height / v.h), ox = (r.width - v.w * s) / 2, oy = (r.height - v.h * s) / 2;
   const wx = v.x + ((px ?? r.width / 2) - ox) / s, wy = v.y + ((py ?? r.height / 2) - oy) / s;
-  const fw = fitVB().w, nw = Math.max(1.5, Math.min(fw * 2, v.w / f)), k = nw / v.w;
-  setVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w: nw, h: v.h * k });
+  const fw = fitVB(P).w, nw = Math.max(1.5, Math.min(fw * 2, v.w / f)), k = nw / v.w;
+  setVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w: nw, h: v.h * k }, P);
 }
-function zoomTo(refs) {
-  const V = view(); let a = [1e9, 1e9, -1e9, -1e9];
-  for (const r of refs) { const p = S.pm[r]; if (!p) continue;
-    for (const q of [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]) { const t = V.pt(q[0], q[1]); a = [Math.min(a[0], t[0]), Math.min(a[1], t[1]), Math.max(a[2], t[0]), Math.max(a[3], t[1])]; } }
+// frame a set of board points in a pane
+function frame(pts, P = P0, minSize = 12) {
+  const V = view(P.side); let a = [1e9, 1e9, -1e9, -1e9];
+  for (const q of pts) { const t = V.pt(q[0], q[1]); a = [Math.min(a[0], t[0]), Math.min(a[1], t[1]), Math.max(a[2], t[0]), Math.max(a[3], t[1])]; }
   if (a[0] > a[2]) return;
-  const m = 4, w = Math.max(a[2] - a[0] + 2 * m, 12), h = Math.max(a[3] - a[1] + 2 * m, 12);
-  setVB({ x: (a[0] + a[2]) / 2 - w / 2, y: (a[1] + a[3]) / 2 - h / 2, w, h });
+  const m = 4, w = Math.max(a[2] - a[0] + 2 * m, minSize), h = Math.max(a[3] - a[1] + 2 * m, minSize);
+  setVB({ x: (a[0] + a[2]) / 2 - w / 2, y: (a[1] + a[3]) / 2 - h / 2, w, h }, P);
+}
+function zoomTo(refs, P = P0) {
+  const pts = [];
+  for (const r of refs) { const p = S.pm[r]; if (p) pts.push([p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]); }
+  frame(pts, P);
+}
+// double-sided view: frame every pad of the selected net in each pane
+function frameNet() {
+  const net = selectedNet(); if (!net) return;
+  for (const P of S.split ? PANES : [P0]) {
+    const pts = [];
+    for (const x of S.netIdx[net] || []) { const p = S.pm[x.r]; if (!p || !(onSide(p, P.side) || isThruPad(x))) continue; const q = p.pads[x.i]; pts.push([q[4] - 1, q[5] - 1], [q[4] + 1, q[5] + 1]); }
+    if (pts.length) frame(pts, P); else setVB(null, P);
+  }
 }
 const wrap = $("#wrap");
-wrap.addEventListener("wheel", e => { if (e.target.closest(".card")) return; e.preventDefault(); const r = wrap.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
-const ptrs = new Map(); let moved = false;
-wrap.addEventListener("pointerdown", e => { if (e.target.closest(".card")) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; wrap.setPointerCapture(e.pointerId); wrap.classList.add("drag"); });
+wrap.addEventListener("wheel", e => { if (e.target.closest(".card")) return; e.preventDefault(); const P = paneOf(e.target), r = P.svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top, P); }, { passive: false });
+const ptrs = new Map(); let moved = false, dragPane = P0;
+wrap.addEventListener("pointerdown", e => { if (e.target.closest(".card")) return; if (!ptrs.size) dragPane = paneOf(e.target); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; wrap.setPointerCapture(e.pointerId); wrap.classList.add("drag"); });
 wrap.addEventListener("pointermove", e => {
   if (!ptrs.has(e.pointerId)) return;
-  const prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+  const P = dragPane, prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
   if (ptrs.size === 1) {
     const dx = cur.x - prev.x, dy = cur.y - prev.y; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-    const r = $("#board").getBoundingClientRect(), s = Math.min(r.width / S.vb.w, r.height / S.vb.h);
-    setVB({ ...S.vb, x: S.vb.x - dx / s, y: S.vb.y - dy / s });
+    const v = S[P.key] || fitVB(P), r = P.svg.getBoundingClientRect(), s = Math.min(r.width / v.w, r.height / v.h);
+    setVB({ ...v, x: v.x - dx / s, y: v.y - dy / s }, P);
   } else if (ptrs.size === 2) {
     moved = true;
     const other = [...ptrs.entries()].find(([k]) => k !== e.pointerId)[1];
-    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y), r = wrap.getBoundingClientRect();
-    if (d0 > 0) zoomAt(d1 / d0, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top);
+    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y), r = P.svg.getBoundingClientRect();
+    if (d0 > 0) zoomAt(d1 / d0, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top, P);
   }
   ptrs.set(e.pointerId, cur);
 });
@@ -2751,29 +3028,35 @@ const endPtr = e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId); if (!ptrs.size) wrap.classList.remove("drag");
   if (!moved && e.type === "pointerup") {
-    if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY); if (hp) { pickPad(hp.r, hp.i, false); return; } }
+    const P = paneOf(document.elementFromPoint(e.clientX, e.clientY) || e.target);
+    if (S.mode === "pin") { const hp = padAt(e.clientX, e.clientY, P); if (hp) { pickPad(hp.r, hp.i, false, true); return; } }
     const hit = document.elementsFromPoint(e.clientX, e.clientY).map(n => n.closest && n.closest(".part")).find(Boolean);
     if (hit) pickPart(hit.dataset.r, false);
   }
 };
 wrap.addEventListener("pointerup", endPtr); wrap.addEventListener("pointercancel", endPtr);
-function padAt(cx, cy) {
-  const pt = $("#board").createSVGPoint(); pt.x = cx; pt.y = cy;
-  const w = pt.matrixTransform(S.worldEl.getScreenCTM().inverse()), tol = S.vb.w / 80;
+function padAt(cx, cy, P = P0) {
+  if (!P.world) return null;
+  const pt = P.svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+  const v = S[P.key] || fitVB(P), w = pt.matrixTransform(P.world.getScreenCTM().inverse()), tol = v.w / 80;
   let best = null, bd = 1e9;
   for (const p of S.b.parts) {
-    if (!onSide(p, S.side)) continue;
+    if (!onSide(p, P.side)) continue;
     p.pads.forEach(([n, net, d, th, px, py, sz], i) => { if (!d || th === 2) return; const dist = Math.hypot(w.x - px, w.y - py) - sz / 2; if (dist < bd) { bd = dist; best = { r: p.r, i }; } });
   }
   return bd < Math.max(.25, tol) ? best : null;
 }
 
 // ---------- toolbar ----------
-$("#zin").onclick = () => zoomAt(1.4); $("#zout").onclick = () => zoomAt(1 / 1.4); $("#zfit").onclick = () => setVB(null);
-$("#zsel").onclick = () => { const g = S.b.groups.find(g => g.id === S.sel); if (S.cur) zoomTo([S.cur]); else if (g) zoomTo(g.refs); };
+const visiblePanes = () => S.split ? PANES : [P0];
+const zoomAll = f => visiblePanes().forEach(P => zoomAt(f, undefined, undefined, P));
+const fitAll = () => visiblePanes().forEach(P => setVB(null, P));
+$("#zin").onclick = () => zoomAll(1.4); $("#zout").onclick = () => zoomAll(1 / 1.4); $("#zfit").onclick = fitAll;
+$("#splitBtn").onclick = () => { S.splitForce = !S.splitForce; render(); if (S.split) { if (selectedNet()) frameNet(); else fitAll(); } };
+$("#zsel").onclick = () => { const g = S.b.groups.find(g => g.id === S.sel); if (S.split && selectedNet()) frameNet(); else if (S.cur) zoomTo([S.cur]); else if (g) zoomTo(g.refs); };
 document.querySelectorAll("#sideSeg button").forEach(btn => btn.onclick = () => setSide(btn.dataset.side, true));
 document.querySelectorAll("#modeSeg button").forEach(btn => btn.onclick = () => setMode(btn.dataset.mode));
-$("#rotBtn").onclick = () => { S.rot = (S.rot + 90) % 360; $("#rotBtn").textContent = `⟳ ${S.rot}°`; S.vb = null; render(); renderCard(); };
+$("#rotBtn").onclick = () => { S.rot = (S.rot + 90) % 360; $("#rotBtn").textContent = `⟳ ${S.rot}°`; S.vb = null; S.vb2 = null; render(); renderCard(); };
 $("#lblSel").value = S.lbl; $("#lblSel").onchange = e => { S.lbl = e.target.value; LS.set("lbl", S.lbl); render(); };
 $("#trkBtn").setAttribute("aria-pressed", S.trk); $("#trkBtn").onclick = () => { S.trk = !S.trk; LS.set("trk", S.trk); $("#trkBtn").setAttribute("aria-pressed", S.trk); render(); };
 function setSide(side, user) {
@@ -2786,7 +3069,8 @@ function setMode(m) {
   S.mode = m; S.pad = null; S.cur = null; if (m === "pin") S.sel = null;
   document.querySelectorAll("#modeSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.mode === m));
   $("#tpSec").hidden = m !== "pin";
-  $("#hint").textContent = m === "pin" ? "点焊盘看引脚 · 放大后更好点" : "滚轮/双指缩放 · 拖动平移";
+  $("#hint").textContent = m === "pin" ? "点焊盘看引脚 · 两面都有连接时自动分屏" : "滚轮/双指缩放 · 拖动平移";
+  $("#splitBtn").hidden = m !== "pin"; if (m !== "pin") S.splitForce = false;
   render(); renderList(); renderCard();
 }
 
@@ -2810,12 +3094,16 @@ function pickPart(r, zoom) {
   if (zoom) zoomTo([r]);
   const row = document.querySelector(`.grp[data-id="${S.sel}"]`); if (row && !zoom) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
-function pickPad(r, i, zoom) {
+function pickPad(r, i, zoom, fromBoard) {
   const p = S.pm[r]; if (!p) return;
+  const before = selectedNet();
   S.pad = { r, i }; S.cur = r;
-  if (!p.tht && p.s !== S.side) setSide(p.s);
+  const willSplit = wantSplit();
+  if (!willSplit && !p.tht && p.s !== S.side) setSide(p.s);
   render(); renderCard();
-  if (zoom) zoomTo([r]);
+  const net = selectedNet();
+  if (S.split) { if (net && (net !== before || !fromBoard)) frameNet(); }
+  else if (zoom) zoomTo([r]);
 }
 const orderedGroups = () => S.b.groups.slice();
 function stepGroup(dir, unfinishedOnly) {
@@ -2884,7 +3172,7 @@ function renderList() {
   host.innerHTML = "";
   let total = 0, nd = 0, tht = 0, bot = 0;
   const bySt = {};
-  for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 9) tht += g.refs.length; if (g.step === 8) bot += g.refs.length; }
+  for (const g of b.groups) { (bySt[g.step] ||= []).push(g); total += g.refs.length; nd += g.refs.filter(r => done[r]).length; if (g.step === 30) tht += g.refs.length; if (g.step > 10 && g.step < 20) bot += g.refs.length; }
   $("#nums").innerHTML = `<span><b>${b.groups.length}</b> 种</span><span><b>${total - tht}</b> 贴片</span><span><b>${tht}</b> 插件</span>${bot ? `<span>底面 <b>${bot}</b></span>` : ""}${b.dnp.length ? `<span>DNP <b>${b.dnp.length}</b></span>` : ""}<span>已焊 <b>${nd}</b> / ${total}</span>`;
   $("#bar").style.width = (total ? nd / total * 100 : 0) + "%";
   $("#src").textContent = `${b.source || ""} · ${b.file || ""}${b.bomFile ? " + BOM " + b.bomFile : "（没有找到 BOM，名称取自设计文件里的值）"}`;
@@ -2943,7 +3231,7 @@ $("#q").addEventListener("input", e => {
   const net = Object.keys(S.netIdx).find(n => n.toUpperCase() === q);
   if (net) { if (S.mode !== "pin") setMode("pin"); const x = S.netIdx[net][0]; pickPad(x.r, x.i, false); }
 });
-$("#clr").onclick = () => { S.sel = null; S.cur = null; S.pad = null; $("#q").value = ""; S.q = ""; render(); renderList(); renderCard(); setVB(null); };
+$("#clr").onclick = () => { S.sel = null; S.cur = null; S.pad = null; $("#q").value = ""; S.q = ""; render(); renderList(); renderCard(); fitAll(); };
 
 $("#copyBom").onclick = async () => {
   const b = S.b, rows = [["步骤", "名称", "封装", "LCSC", "MPN", "数量", "位号", "极性", "备注"]];
@@ -2973,10 +3261,11 @@ document.addEventListener("keydown", e => {
   else if (k === " ") { e.preventDefault(); $("#doneNext").click(); }
   else if (k === "t" || k === "T") setMode(S.mode === "pin" ? "solder" : "pin");
   else if (k === "f" || k === "F") setSide(S.side === "F" ? "B" : "F", true);
+  else if ((k === "d" || k === "D") && S.mode === "pin") $("#splitBtn").click();
   else if (k === "r" || k === "R") $("#rotBtn").click();
-  else if (k === "0") setVB(null);
-  else if (k === "+" || k === "=") zoomAt(1.4);
-  else if (k === "-") zoomAt(1 / 1.4);
+  else if (k === "0") fitAll();
+  else if (k === "+" || k === "=") zoomAll(1.4);
+  else if (k === "-") zoomAll(1 / 1.4);
   else if (k === "Escape") $("#clr").click();
   else return;
 });
@@ -2997,7 +3286,7 @@ function renderTabs() {
 }
 function openBoard(key) {
   S.b = S.boards.find(b => b.key === key) || S.boards[0];
-  S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
+  S.sel = null; S.cur = null; S.pad = null; S.vb = null; S.vb2 = null; S.split = false; S.splitForce = false; S.rot = 0; $("#rotBtn").textContent = "⟳ 0°";
   S.pm = Object.fromEntries(S.b.parts.map(p => [p.r, p]));
   S.netIdx = {};
   for (const p of S.b.parts) p.pads.forEach((pd, i) => { if (pd[1]) (S.netIdx[pd[1]] ||= []).push({ r: p.r, i, n: pd[0], s: p.tht ? "T" : p.s }); });
@@ -3010,7 +3299,7 @@ function openBoard(key) {
 }
 function showApp() { $("#empty").hidden = true; $("#app").hidden = false; $("#tabs").hidden = false; }
 function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#tabs").hidden = true; S.b = null; }
-window.addEventListener("resize", () => { if (S.b) setVB(S.vb); });
+window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => setVB(S[P.key], P)); });
 
 (async () => {
   const saved = await DB.all();

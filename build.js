@@ -1,7 +1,7 @@
 // Bundles src/ into the single-file index.html (no dependencies). Usage: node build.js
 const fs = require("fs"), path = require("path");
 const SRC = path.join(__dirname, "src");
-const MODULES = ["core/geom.js", "core/files.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js",
+const MODULES = ["core/geom.js", "core/files.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js", "import/easyeda_std.js",
   "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "core/project.js", "enrich.js", "app.js"];
 const js = MODULES.map(f => `// ===== ${f} =====\n` + fs.readFileSync(path.join(SRC, f), "utf8").replace(/<\/script/gi, "<\/script")).join("\n");
 let html = fs.readFileSync(path.join(SRC, "shell.html"), "utf8");

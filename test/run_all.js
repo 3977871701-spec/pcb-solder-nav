@@ -22,3 +22,19 @@ const R = f => fs.readFileSync(f, "utf8");
   cmpFly(v01, Tables.flyprobe(R(`${S}/v01_flyprobe.json`)), "嘉立创EDA .epro2 vs JLC flying probe (V01_R9) [nets renamed between revisions]");
   for (const f of ["HiFive1.B01", "eDP_adapter_dvt1"]) cmpBoards(ImpKiCad.parse(R(`${S}/altium/${f}.kicad_pcb`), f), ImpAltium.parse(new Uint8Array(fs.readFileSync(`${S}/altium/${f}.PcbDoc`)), f), `Altium .PcbDoc ${f} vs KiCad importer`);
 })();
+// extra Altium boards (binary PcbDoc) and EasyEDA Standard self-consistency
+(async () => {
+  for (const f of ["fx1", "fx2", "fx3"]) {
+    const p = `${S}/altium2/${f}.PcbDoc`; if (!fs.existsSync(p)) continue;
+    cmpBoards(ImpKiCad.parse(R(`${S}/altium2/${f}.kicad_pcb`), f), Enrich.enrich(ImpAltium.parse(new Uint8Array(fs.readFileSync(p)), f), null), `Altium .PcbDoc ${f} vs KiCad importer`);
+  }
+  const std = `${S}/easystd.json`;
+  if (fs.existsSync(std)) {
+    const obj = JSON.parse(R(std)), b = ImpEasyStd.parse(obj, "std"), K = 0.254;
+    const pads = b.parts.flatMap(p => p.pads.map(q => ({ net: q[1], x: q[4], y: q[5], sz: q[6] })));
+    let same = 0, other = 0;
+    for (const s of obj.shape) { const f = s.split("~"); if (f[0] !== "TRACK" || !(f[2] === "1" || f[2] === "2") || !f[3]) continue; const n = f[4].trim().split(/\s+/).map(Number);
+      for (const [x, y] of [[n[0] * K, n[1] * K], [n[n.length - 2] * K, n[n.length - 1] * K]]) { const on = pads.filter(p => Math.hypot(p.x - x, p.y - y) < p.sz / 2 + 0.15); if (!on.length) continue; if (on.some(p => p.net === f[3])) same++; else other++; } }
+    console.log(`${other === 0 && same > 0 ? "PASS" : "FAIL"} 嘉立创EDA标准版 self-consistency: track ends on same-net pads ${same}, on other-net pads ${other}`);
+  }
+})();
