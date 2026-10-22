@@ -54,7 +54,7 @@ globalThis.Geom = (() => {
     return [String(num ?? ""), net || "", d, kind, f3((bb[0] + bb[2]) / 2), f3((bb[1] + bb[3]) / 2), f3(Math.min(bb[2] - bb[0], bb[3] - bb[1])), bb];
   }
   // empty board skeleton every importer fills in
-  const newBoard = () => ({ bbox: null, edges: "", silk: { F: "", B: "" }, tracks: { F: [], B: [] }, vias: [], parts: [] });
+  const newBoard = () => ({ bbox: null, edges: "", silk: { F: "", B: "" }, tracks: { F: [], B: [] }, pours: { F: [], B: [] }, vias: [], parts: [] });
   function finishBoard(b, edgePts) {
     let bb = edgePts && edgePts.length ? bboxOf(edgePts) : null;
     if (!validBB(bb)) { bb = [1e9, 1e9, -1e9, -1e9]; for (const p of b.parts) bboxOf([[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]], bb); }
@@ -63,7 +63,9 @@ globalThis.Geom = (() => {
     for (const p of b.parts) for (const pd of p.pads) pd.length = 7; // drop internal bbox
     return b;
   }
-  // group tracks by width: input [[w, d], ...] → [[w, joinedD]]
-  function groupTracks(list) { const m = {}; for (const [w, d] of list) (m[f3(w)] ||= []).push(d); return Object.entries(m).map(([w, a]) => [w, a.join("")]); }
-  return { f3, P, polyD, lineD, circ, circleD, rotK, rotM, arcD, arcPts, rrect, rect, bboxOf, validBB, padRec, newBoard, finishBoard, groupTracks };
+  // group tracks by width and net: input [[w, d, net?], ...] → [[w, joinedD, net]]
+  function groupTracks(list) { const m = {}; for (const [w, d, net = ""] of list) (m[f3(w) + "" + net] ||= []).push(d); return Object.entries(m).map(([k, a]) => { const [w, net] = k.split(""); return [+w, a.join(""), net]; }); }
+  // group copper pours by net: [[d, net], ...] → [[joinedD, net]]
+  function groupPours(list) { const m = {}; for (const [d, net = ""] of list) (m[net] ||= []).push(d); return Object.entries(m).map(([net, a]) => [a.join(""), net]); }
+  return { f3, P, polyD, lineD, circ, circleD, rotK, rotM, arcD, arcPts, rrect, rect, bboxOf, validBB, padRec, newBoard, finishBoard, groupTracks, groupPours };
 })();

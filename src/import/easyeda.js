@@ -73,7 +73,8 @@ globalThis.ImpEasyEDA = (() => {
       if (r.type === "PAD_NET") { let id; try { id = JSON.parse(r.id); } catch (e) { continue; } const [, comp, num, padId] = id; const net = (r.b && r.b.padNet) || ""; padNet[comp + "|id|" + padId] = net; padNet[comp + "|n|" + num] = net; }
     }
     // board outline and silk
-    const tracks = { F: [], B: [] }, silk = { F: [], B: [] };
+    const tracks = { F: [], B: [] }, silk = { F: [], B: [] }, pours = { F: [], B: [] }, pourDef = {};
+    for (const r of recs) if (r.type === "POUR" && r.b && (r.b.layerId === 1 || r.b.layerId === 2)) pourDef[r.id] = r.b;
     for (const r of recs) {
       const o = r.b; if (!o || typeof o !== "object") continue;
       const L = o.layerId;
@@ -81,11 +82,18 @@ globalThis.ImpEasyEDA = (() => {
       else if ((r.type === "POLY" || r.type === "LINE") && (L === 3 || L === 4)) {
         const runs = r.type === "LINE" ? [[[o.startX, o.startY], [o.endX, o.endY]]] : pathRuns(o.path);
         for (const run of runs) silk[L === 3 ? "F" : "B"].push(G.lineD(run.map(flip)));
-      } else if (r.type === "LINE" && (L === 1 || L === 2)) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([flip([o.startX, o.startY]), flip([o.endX, o.endY])])]);
-      else if (r.type === "ARC" && (L === 1 || L === 2) && o.startX !== undefined) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([[o.startX, o.startY], ...arcByAngle([o.startX, o.startY], [o.endX, o.endY], o.arcAngle ?? o.angle ?? 0)].map(flip))]);
-      else if (r.type === "VIA") b.vias.push([G.f3(o.centerX * MIL), G.f3(-o.centerY * MIL), G.f3((o.viaDiameter || 20) * MIL / 2)]);
+      } else if (r.type === "LINE" && (L === 1 || L === 2)) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([flip([o.startX, o.startY]), flip([o.endX, o.endY])]), o.netName || ""]);
+      else if (r.type === "ARC" && (L === 1 || L === 2) && o.startX !== undefined) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([[o.startX, o.startY], ...arcByAngle([o.startX, o.startY], [o.endX, o.endY], o.arcAngle ?? o.angle ?? 0)].map(flip)), o.netName || ""]);
+      else if (r.type === "POURED") { // computed copper of a pour; its id points at the POUR (layer, net). Coordinates are in 10 mil.
+        let pid; try { pid = JSON.parse(r.id)[1]; } catch (e) { continue; }
+        const def = pourDef[pid]; if (!def) continue; // left over from a deleted pour
+        for (const f of o.pourFill || []) if (f.fill) for (const run of pathRuns(f.path)) if (run.length > 2) pours[def.layerId === 1 ? "F" : "B"].push([G.lineD(run.map(([x, y]) => flip([x * 10, y * 10]))) + "Z", def.netName || ""]);
+      }
+      else if (r.type === "FILL" && (L === 1 || L === 2)) for (const run of pathRuns(o.path)) if (run.length > 2) pours[L === 1 ? "F" : "B"].push([G.lineD(run.map(flip)) + "Z", o.netName || ""]);
+      else if (r.type === "VIA") b.vias.push([G.f3(o.centerX * MIL), G.f3(-o.centerY * MIL), G.f3((o.viaDiameter || 20) * MIL / 2), o.netName || ""]);
     }
     b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.pours = { F: G.groupPours(pours.F), B: G.groupPours(pours.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
 
     const fpCache = {};

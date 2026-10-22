@@ -93,7 +93,7 @@ globalThis.ImpIPC2581 = (() => {
     for (const ln of X.kids(step, "LogicalNet")) for (const pr of X.kids(ln, "PinRef")) lnet[pr.a.componentRef + "\u0001" + pr.a.pin] = ln.a.name;
 
     // copper features: pads with PinRef, vias, tracks
-    const padsByRef = {}, tracks = { F: [], B: [] }, silk = { F: [], B: [] }, holes = [];
+    const padsByRef = {}, tracks = { F: [], B: [] }, pours = { F: [], B: [] }, silk = { F: [], B: [] }, holes = [];
     for (const lf of X.kids(step, "LayerFeature")) {
       const L = layers[lf.a.layerRef] || { fn: "" };
       if (L.fn === "DRILL") { for (const set of X.kids(lf, "Set")) for (const h of X.kids(set, "Hole")) holes.push({ x: num(h.a.x) * s, y: -num(h.a.y) * s, d: num(h.a.diameter) * s, plated: h.a.platingStatus !== "NONPLATED" }); continue; }
@@ -117,18 +117,26 @@ globalThis.ImpIPC2581 = (() => {
             if (!list.some(q => q.pin === pr.a.pin && q.side !== side)) list.push({ pin: pr.a.pin, net, polys, side });
           } else if (polys.length) {
             const bb = G.bboxOf(polys.flat());
-            if (G.validBB(bb)) b.vias.push([G.f3((bb[0] + bb[2]) / 2), G.f3((bb[1] + bb[3]) / 2), G.f3((bb[2] - bb[0]) / 2)]);
+            if (G.validBB(bb)) b.vias.push([G.f3((bb[0] + bb[2]) / 2), G.f3((bb[1] + bb[3]) / 2), G.f3((bb[2] - bb[0]) / 2), net]);
           }
         }
         for (const f of X.kids(set, "Features")) {
           const T = xfFn(X.kid(f, "Xform"), X.kid(f, "Location"), s);
-          for (const g of f.c) for (const st of strokes(g, s, ctx)) tracks[side].push([st.w, G.lineD(st.pts.map(T).map(flip))]);
+          for (const g of f.c) {
+            if (g.n === "Contour") { // copper pour: outline plus cut-outs, drawn even-odd
+              const rings = [X.kid(g, "Polygon"), ...X.kids(g, "Cutout")].filter(Boolean).map(pg => polyPts(pg, s).map(T).map(flip));
+              if (rings.length && rings[0].length > 2) pours[side].push([rings.map(G.polyD).join(""), net]);
+              continue;
+            }
+            for (const st of strokes(g, s, ctx)) tracks[side].push([st.w, G.lineD(st.pts.map(T).map(flip)), net]);
+          }
         }
       }
     }
     // dedupe vias that appear on several layers
     const vseen = new Set(); b.vias = b.vias.filter(v => { const k = v[0] + "," + v[1]; if (vseen.has(k)) return false; vseen.add(k); return true; });
     b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.pours = { F: G.groupPours(pours.F), B: G.groupPours(pours.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
 
     // packages

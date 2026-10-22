@@ -50,7 +50,7 @@ async function walkEntry(e, prefix = "") {
 }
 const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
 // bump when import rules change: boards parsed by an older version are dropped on load and must be re-imported
-const IMPORT_VER = 4;
+const IMPORT_VER = 5;
 const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
   if (!list.length) return;
@@ -258,15 +258,18 @@ function renderPane(P) {
   const [x0, y0, x1, y1] = b.bbox;
   const world = el("g", { transform: V.tf }, svg); P.world = world;
   el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: .8, class: "b-fill" }, world);
+  const selNet = selectedNet();
   if (S.trk) {
-    for (const [w, d] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, world);
-    for (const [vx, vy, vr] of b.vias) el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, world);
+    // copper in one group so overlapping pieces do not stack up in opacity; the selected net is drawn again on top
+    const cu = el("g", { class: "cu" }, world), on = el("g", { class: "cu on" }, world);
+    for (const [d, net] of (b.pours && b.pours[side]) || []) el("path", { d, class: "pour" }, selNet && net === selNet ? on : cu);
+    for (const [w, d, net] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, selNet && net === selNet ? on : cu);
+    for (const [vx, vy, vr, net] of b.vias) { const g = selNet && net === selNet ? on : cu; el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, g); el("circle", { cx: vx, cy: vy, r: Math.max(.05, vr * .45), class: "vhole" }, g); }
   }
   if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));
-  const selNet = selectedNet();
   const netRefs = new Set(selNet ? (S.netIdx[selNet] || []).map(x => x.r) : []);
   if (pin && S.cur) netRefs.add(S.cur);
   if (selRefs.size || netRefs.size) world.classList.add("dim");

@@ -77,8 +77,16 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .ptag b { color: var(--net); font-weight: 600; }
 .b-fill { fill: var(--board); }
 .b-edge { fill: none; stroke: var(--edge); stroke-width: .25; }
-.trk { fill: none; stroke: var(--track); stroke-linecap: round; }
+.trk { fill: none; stroke: var(--track); stroke-linecap: round; stroke-linejoin: round; }
+.pour { fill: var(--track); fill-rule: evenodd; }
+.cu { opacity: .9; }
+.cu .pour { opacity: .55; }
 .via { fill: var(--track); }
+.vhole { fill: var(--board); }
+.cu.on { opacity: 1; }
+.cu.on .trk { stroke: var(--net); }
+.cu.on .pour { fill: var(--net); opacity: .35; }
+.cu.on .via { fill: var(--net); }
 .bsilk { fill: none; stroke: var(--silk); stroke-width: .12; }
 .part .pad { fill: var(--pad); fill-rule: evenodd; }
 .part .pad.p1 { fill: var(--pin1); }
@@ -93,7 +101,7 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .part.dnp .pad { fill: none; stroke: var(--muted); stroke-width: .06; stroke-dasharray: .15 .1; }
 .part.done .pad, .part.done .pad.p1 { fill: var(--done); }
 .dim .part:not(.hi):not(.nhi) { opacity: .28; }
-.dim .trk, .dim .bsilk, .dim .via { opacity: .5; }
+.dim .cu:not(.on), .dim .bsilk { opacity: .45; }
 .dim .part.nhi { opacity: 1; }
 .part.hi .pad { fill: var(--accent); }
 .part.hi .pad.p1 { fill: var(--pin1); }

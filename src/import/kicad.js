@@ -112,14 +112,19 @@ globalThis.ImpKiCad = (() => {
       if (g.layer === "Edge.Cuts") { edges.push(g.d); ep.push(...g.pts); }
       else if (g.layer === "F.SilkS") silk.F.push(g.d); else if (g.layer === "B.SilkS") silk.B.push(g.d);
     }
-    const tracks = { F: {}, B: {} }, vias = [];
+    const tracks = { F: [], B: [] }, pours = { F: [], B: [] }, vias = [];
+    const cuSide = L => L === "F.Cu" ? "F" : L === "B.Cu" ? "B" : null;
     for (const n of root) {
       if (!isA(n)) continue;
       if (n[0] === "segment" || n[0] === "arc") {
         const L = layerOf(n), side = L === "F.Cu" ? "F" : L === "B.Cu" ? "B" : null; if (!side) continue;
         const s = XY(n, "start"), e = XY(n, "end"), w = f3(N((kid(n, "width") || [0, .2])[1])), m = XY(n, "mid");
-        (tracks[side][w] ||= []).push(n[0] === "arc" && m ? arcD(s, m, e) : `M${P(s)}L${P(e)}`);
-      } else if (n[0] === "via") { const a = XY(n, "at"), sz = N((kid(n, "size") || [0, .6])[1]); if (a) vias.push([f3(a[0]), f3(a[1]), f3(sz / 2)]); }
+        tracks[side].push([w, n[0] === "arc" && m ? arcD(s, m, e) : `M${P(s)}L${P(e)}`, netName(kid(n, "net"))]);
+      } else if (n[0] === "via") { const a = XY(n, "at"), sz = N((kid(n, "size") || [0, .6])[1]); if (a) vias.push([f3(a[0]), f3(a[1]), f3(sz / 2), netName(kid(n, "net"))]); }
+      else if (n[0] === "zone") { // filled copper of a zone, as KiCad last computed it
+        const net = (kid(n, "net_name") || [])[1] || netName(kid(n, "net"));
+        for (const fp of kids(n, "filled_polygon")) { const side = cuSide((kid(fp, "layer") || [])[1]); const pts = kid(fp, "pts"); if (!side || !pts) continue; const xy = kids(pts, "xy").map(q => [N(q[1]), N(q[2])]); if (xy.length > 2) pours[side].push(["M" + xy.map(P).join("L") + "Z", net]); }
+      }
     }
 
     const parts = [];
@@ -184,8 +189,7 @@ globalThis.ImpKiCad = (() => {
     const pts = ep.length ? ep : parts.flatMap(p => [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]);
     if (pts.length) { bbox = [1e9, 1e9, -1e9, -1e9]; for (const q of pts) { bbox[0] = Math.min(bbox[0], q[0]); bbox[1] = Math.min(bbox[1], q[1]); bbox[2] = Math.max(bbox[2], q[0]); bbox[3] = Math.max(bbox[3], q[1]); } bbox = bbox.map(f3); }
     else bbox = [0, 0, 50, 50];
-    const tr = s => Object.entries(tracks[s]).map(([w, a]) => [w, a.join("")]);
-    return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: tr("F"), B: tr("B") }, vias, parts };
+    return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: Geom.groupTracks(tracks.F), B: Geom.groupTracks(tracks.B) }, pours: { F: Geom.groupPours(pours.F), B: Geom.groupPours(pours.B) }, vias, parts };
   }
 
   return { parse, sexpr };

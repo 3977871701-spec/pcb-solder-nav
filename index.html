@@ -77,8 +77,16 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .ptag b { color: var(--net); font-weight: 600; }
 .b-fill { fill: var(--board); }
 .b-edge { fill: none; stroke: var(--edge); stroke-width: .25; }
-.trk { fill: none; stroke: var(--track); stroke-linecap: round; }
+.trk { fill: none; stroke: var(--track); stroke-linecap: round; stroke-linejoin: round; }
+.pour { fill: var(--track); fill-rule: evenodd; }
+.cu { opacity: .9; }
+.cu .pour { opacity: .55; }
 .via { fill: var(--track); }
+.vhole { fill: var(--board); }
+.cu.on { opacity: 1; }
+.cu.on .trk { stroke: var(--net); }
+.cu.on .pour { fill: var(--net); opacity: .35; }
+.cu.on .via { fill: var(--net); }
 .bsilk { fill: none; stroke: var(--silk); stroke-width: .12; }
 .part .pad { fill: var(--pad); fill-rule: evenodd; }
 .part .pad.p1 { fill: var(--pin1); }
@@ -93,7 +101,7 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .part.dnp .pad { fill: none; stroke: var(--muted); stroke-width: .06; stroke-dasharray: .15 .1; }
 .part.done .pad, .part.done .pad.p1 { fill: var(--done); }
 .dim .part:not(.hi):not(.nhi) { opacity: .28; }
-.dim .trk, .dim .bsilk, .dim .via { opacity: .5; }
+.dim .cu:not(.on), .dim .bsilk { opacity: .45; }
 .dim .part.nhi { opacity: 1; }
 .part.hi .pad { fill: var(--accent); }
 .part.hi .pad.p1 { fill: var(--pin1); }
@@ -380,7 +388,7 @@ globalThis.Geom = (() => {
     return [String(num ?? ""), net || "", d, kind, f3((bb[0] + bb[2]) / 2), f3((bb[1] + bb[3]) / 2), f3(Math.min(bb[2] - bb[0], bb[3] - bb[1])), bb];
   }
   // empty board skeleton every importer fills in
-  const newBoard = () => ({ bbox: null, edges: "", silk: { F: "", B: "" }, tracks: { F: [], B: [] }, vias: [], parts: [] });
+  const newBoard = () => ({ bbox: null, edges: "", silk: { F: "", B: "" }, tracks: { F: [], B: [] }, pours: { F: [], B: [] }, vias: [], parts: [] });
   function finishBoard(b, edgePts) {
     let bb = edgePts && edgePts.length ? bboxOf(edgePts) : null;
     if (!validBB(bb)) { bb = [1e9, 1e9, -1e9, -1e9]; for (const p of b.parts) bboxOf([[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]], bb); }
@@ -389,9 +397,11 @@ globalThis.Geom = (() => {
     for (const p of b.parts) for (const pd of p.pads) pd.length = 7; // drop internal bbox
     return b;
   }
-  // group tracks by width: input [[w, d], ...] → [[w, joinedD]]
-  function groupTracks(list) { const m = {}; for (const [w, d] of list) (m[f3(w)] ||= []).push(d); return Object.entries(m).map(([w, a]) => [w, a.join("")]); }
-  return { f3, P, polyD, lineD, circ, circleD, rotK, rotM, arcD, arcPts, rrect, rect, bboxOf, validBB, padRec, newBoard, finishBoard, groupTracks };
+  // group tracks by width and net: input [[w, d, net?], ...] → [[w, joinedD, net]]
+  function groupTracks(list) { const m = {}; for (const [w, d, net = ""] of list) (m[f3(w) + "" + net] ||= []).push(d); return Object.entries(m).map(([k, a]) => { const [w, net] = k.split(""); return [+w, a.join(""), net]; }); }
+  // group copper pours by net: [[d, net], ...] → [[joinedD, net]]
+  function groupPours(list) { const m = {}; for (const [d, net = ""] of list) (m[net] ||= []).push(d); return Object.entries(m).map(([net, a]) => [a.join(""), net]); }
+  return { f3, P, polyD, lineD, circ, circleD, rotK, rotM, arcD, arcPts, rrect, rect, bboxOf, validBB, padRec, newBoard, finishBoard, groupTracks, groupPours };
 })();
 
 // ===== core/files.js =====
@@ -838,14 +848,19 @@ globalThis.ImpKiCad = (() => {
       if (g.layer === "Edge.Cuts") { edges.push(g.d); ep.push(...g.pts); }
       else if (g.layer === "F.SilkS") silk.F.push(g.d); else if (g.layer === "B.SilkS") silk.B.push(g.d);
     }
-    const tracks = { F: {}, B: {} }, vias = [];
+    const tracks = { F: [], B: [] }, pours = { F: [], B: [] }, vias = [];
+    const cuSide = L => L === "F.Cu" ? "F" : L === "B.Cu" ? "B" : null;
     for (const n of root) {
       if (!isA(n)) continue;
       if (n[0] === "segment" || n[0] === "arc") {
         const L = layerOf(n), side = L === "F.Cu" ? "F" : L === "B.Cu" ? "B" : null; if (!side) continue;
         const s = XY(n, "start"), e = XY(n, "end"), w = f3(N((kid(n, "width") || [0, .2])[1])), m = XY(n, "mid");
-        (tracks[side][w] ||= []).push(n[0] === "arc" && m ? arcD(s, m, e) : `M${P(s)}L${P(e)}`);
-      } else if (n[0] === "via") { const a = XY(n, "at"), sz = N((kid(n, "size") || [0, .6])[1]); if (a) vias.push([f3(a[0]), f3(a[1]), f3(sz / 2)]); }
+        tracks[side].push([w, n[0] === "arc" && m ? arcD(s, m, e) : `M${P(s)}L${P(e)}`, netName(kid(n, "net"))]);
+      } else if (n[0] === "via") { const a = XY(n, "at"), sz = N((kid(n, "size") || [0, .6])[1]); if (a) vias.push([f3(a[0]), f3(a[1]), f3(sz / 2), netName(kid(n, "net"))]); }
+      else if (n[0] === "zone") { // filled copper of a zone, as KiCad last computed it
+        const net = (kid(n, "net_name") || [])[1] || netName(kid(n, "net"));
+        for (const fp of kids(n, "filled_polygon")) { const side = cuSide((kid(fp, "layer") || [])[1]); const pts = kid(fp, "pts"); if (!side || !pts) continue; const xy = kids(pts, "xy").map(q => [N(q[1]), N(q[2])]); if (xy.length > 2) pours[side].push(["M" + xy.map(P).join("L") + "Z", net]); }
+      }
     }
 
     const parts = [];
@@ -910,8 +925,7 @@ globalThis.ImpKiCad = (() => {
     const pts = ep.length ? ep : parts.flatMap(p => [[p.bb[0], p.bb[1]], [p.bb[2], p.bb[3]]]);
     if (pts.length) { bbox = [1e9, 1e9, -1e9, -1e9]; for (const q of pts) { bbox[0] = Math.min(bbox[0], q[0]); bbox[1] = Math.min(bbox[1], q[1]); bbox[2] = Math.max(bbox[2], q[0]); bbox[3] = Math.max(bbox[3], q[1]); } bbox = bbox.map(f3); }
     else bbox = [0, 0, 50, 50];
-    const tr = s => Object.entries(tracks[s]).map(([w, a]) => [w, a.join("")]);
-    return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: tr("F"), B: tr("B") }, vias, parts };
+    return { ver, title, file: fileName, bbox, edges: edges.join(""), silk: { F: silk.F.join(""), B: silk.B.join("") }, tracks: { F: Geom.groupTracks(tracks.F), B: Geom.groupTracks(tracks.B) }, pours: { F: Geom.groupPours(pours.F), B: Geom.groupPours(pours.B) }, vias, parts };
   }
 
   return { parse, sexpr };
@@ -1013,7 +1027,7 @@ globalThis.ImpIPC2581 = (() => {
     for (const ln of X.kids(step, "LogicalNet")) for (const pr of X.kids(ln, "PinRef")) lnet[pr.a.componentRef + "\u0001" + pr.a.pin] = ln.a.name;
 
     // copper features: pads with PinRef, vias, tracks
-    const padsByRef = {}, tracks = { F: [], B: [] }, silk = { F: [], B: [] }, holes = [];
+    const padsByRef = {}, tracks = { F: [], B: [] }, pours = { F: [], B: [] }, silk = { F: [], B: [] }, holes = [];
     for (const lf of X.kids(step, "LayerFeature")) {
       const L = layers[lf.a.layerRef] || { fn: "" };
       if (L.fn === "DRILL") { for (const set of X.kids(lf, "Set")) for (const h of X.kids(set, "Hole")) holes.push({ x: num(h.a.x) * s, y: -num(h.a.y) * s, d: num(h.a.diameter) * s, plated: h.a.platingStatus !== "NONPLATED" }); continue; }
@@ -1037,18 +1051,26 @@ globalThis.ImpIPC2581 = (() => {
             if (!list.some(q => q.pin === pr.a.pin && q.side !== side)) list.push({ pin: pr.a.pin, net, polys, side });
           } else if (polys.length) {
             const bb = G.bboxOf(polys.flat());
-            if (G.validBB(bb)) b.vias.push([G.f3((bb[0] + bb[2]) / 2), G.f3((bb[1] + bb[3]) / 2), G.f3((bb[2] - bb[0]) / 2)]);
+            if (G.validBB(bb)) b.vias.push([G.f3((bb[0] + bb[2]) / 2), G.f3((bb[1] + bb[3]) / 2), G.f3((bb[2] - bb[0]) / 2), net]);
           }
         }
         for (const f of X.kids(set, "Features")) {
           const T = xfFn(X.kid(f, "Xform"), X.kid(f, "Location"), s);
-          for (const g of f.c) for (const st of strokes(g, s, ctx)) tracks[side].push([st.w, G.lineD(st.pts.map(T).map(flip))]);
+          for (const g of f.c) {
+            if (g.n === "Contour") { // copper pour: outline plus cut-outs, drawn even-odd
+              const rings = [X.kid(g, "Polygon"), ...X.kids(g, "Cutout")].filter(Boolean).map(pg => polyPts(pg, s).map(T).map(flip));
+              if (rings.length && rings[0].length > 2) pours[side].push([rings.map(G.polyD).join(""), net]);
+              continue;
+            }
+            for (const st of strokes(g, s, ctx)) tracks[side].push([st.w, G.lineD(st.pts.map(T).map(flip)), net]);
+          }
         }
       }
     }
     // dedupe vias that appear on several layers
     const vseen = new Set(); b.vias = b.vias.filter(v => { const k = v[0] + "," + v[1]; if (vseen.has(k)) return false; vseen.add(k); return true; });
     b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.pours = { F: G.groupPours(pours.F), B: G.groupPours(pours.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
 
     // packages
@@ -1207,7 +1229,8 @@ globalThis.ImpEasyEDA = (() => {
       if (r.type === "PAD_NET") { let id; try { id = JSON.parse(r.id); } catch (e) { continue; } const [, comp, num, padId] = id; const net = (r.b && r.b.padNet) || ""; padNet[comp + "|id|" + padId] = net; padNet[comp + "|n|" + num] = net; }
     }
     // board outline and silk
-    const tracks = { F: [], B: [] }, silk = { F: [], B: [] };
+    const tracks = { F: [], B: [] }, silk = { F: [], B: [] }, pours = { F: [], B: [] }, pourDef = {};
+    for (const r of recs) if (r.type === "POUR" && r.b && (r.b.layerId === 1 || r.b.layerId === 2)) pourDef[r.id] = r.b;
     for (const r of recs) {
       const o = r.b; if (!o || typeof o !== "object") continue;
       const L = o.layerId;
@@ -1215,11 +1238,18 @@ globalThis.ImpEasyEDA = (() => {
       else if ((r.type === "POLY" || r.type === "LINE") && (L === 3 || L === 4)) {
         const runs = r.type === "LINE" ? [[[o.startX, o.startY], [o.endX, o.endY]]] : pathRuns(o.path);
         for (const run of runs) silk[L === 3 ? "F" : "B"].push(G.lineD(run.map(flip)));
-      } else if (r.type === "LINE" && (L === 1 || L === 2)) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([flip([o.startX, o.startY]), flip([o.endX, o.endY])])]);
-      else if (r.type === "ARC" && (L === 1 || L === 2) && o.startX !== undefined) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([[o.startX, o.startY], ...arcByAngle([o.startX, o.startY], [o.endX, o.endY], o.arcAngle ?? o.angle ?? 0)].map(flip))]);
-      else if (r.type === "VIA") b.vias.push([G.f3(o.centerX * MIL), G.f3(-o.centerY * MIL), G.f3((o.viaDiameter || 20) * MIL / 2)]);
+      } else if (r.type === "LINE" && (L === 1 || L === 2)) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([flip([o.startX, o.startY]), flip([o.endX, o.endY])]), o.netName || ""]);
+      else if (r.type === "ARC" && (L === 1 || L === 2) && o.startX !== undefined) tracks[L === 1 ? "F" : "B"].push([o.width * MIL, G.lineD([[o.startX, o.startY], ...arcByAngle([o.startX, o.startY], [o.endX, o.endY], o.arcAngle ?? o.angle ?? 0)].map(flip)), o.netName || ""]);
+      else if (r.type === "POURED") { // computed copper of a pour; its id points at the POUR (layer, net). Coordinates are in 10 mil.
+        let pid; try { pid = JSON.parse(r.id)[1]; } catch (e) { continue; }
+        const def = pourDef[pid]; if (!def) continue; // left over from a deleted pour
+        for (const f of o.pourFill || []) if (f.fill) for (const run of pathRuns(f.path)) if (run.length > 2) pours[def.layerId === 1 ? "F" : "B"].push([G.lineD(run.map(([x, y]) => flip([x * 10, y * 10]))) + "Z", def.netName || ""]);
+      }
+      else if (r.type === "FILL" && (L === 1 || L === 2)) for (const run of pathRuns(o.path)) if (run.length > 2) pours[L === 1 ? "F" : "B"].push([G.lineD(run.map(flip)) + "Z", o.netName || ""]);
+      else if (r.type === "VIA") b.vias.push([G.f3(o.centerX * MIL), G.f3(-o.centerY * MIL), G.f3((o.viaDiameter || 20) * MIL / 2), o.netName || ""]);
     }
     b.tracks = { F: G.groupTracks(tracks.F), B: G.groupTracks(tracks.B) };
+    b.pours = { F: G.groupPours(pours.F), B: G.groupPours(pours.B) };
     b.silk = { F: silk.F.join(""), B: silk.B.join("") };
 
     const fpCache = {};
@@ -2817,7 +2847,7 @@ async function walkEntry(e, prefix = "") {
 }
 const fileEntry = (f, path) => ({ path: path || f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) });
 // bump when import rules change: boards parsed by an older version are dropped on load and must be re-imported
-const IMPORT_VER = 4;
+const IMPORT_VER = 5;
 const boardKey = (meta, b) => `${meta.path}|${b.parts.length}|${b.bbox.map(v => Math.round(v)).join(",")}`;
 async function ingest(list) {
   if (!list.length) return;
@@ -3025,15 +3055,18 @@ function renderPane(P) {
   const [x0, y0, x1, y1] = b.bbox;
   const world = el("g", { transform: V.tf }, svg); P.world = world;
   el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: .8, class: "b-fill" }, world);
+  const selNet = selectedNet();
   if (S.trk) {
-    for (const [w, d] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, world);
-    for (const [vx, vy, vr] of b.vias) el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, world);
+    // copper in one group so overlapping pieces do not stack up in opacity; the selected net is drawn again on top
+    const cu = el("g", { class: "cu" }, world), on = el("g", { class: "cu on" }, world);
+    for (const [d, net] of (b.pours && b.pours[side]) || []) el("path", { d, class: "pour" }, selNet && net === selNet ? on : cu);
+    for (const [w, d, net] of b.tracks[side]) el("path", { d, class: "trk", "stroke-width": w }, selNet && net === selNet ? on : cu);
+    for (const [vx, vy, vr, net] of b.vias) { const g = selNet && net === selNet ? on : cu; el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, g); el("circle", { cx: vx, cy: vy, r: Math.max(.05, vr * .45), class: "vhole" }, g); }
   }
   if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));
-  const selNet = selectedNet();
   const netRefs = new Set(selNet ? (S.netIdx[selNet] || []).map(x => x.r) : []);
   if (pin && S.cur) netRefs.add(S.cur);
   if (selRefs.size || netRefs.size) world.classList.add("dim");
