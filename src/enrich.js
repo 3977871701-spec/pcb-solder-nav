@@ -41,6 +41,12 @@ globalThis.Enrich = (() => {
     if (/^(J|P|CN|CON|USB|FPC)\d/.test(r) && !p.tht && FINE.test(fp)) return "pin1";
     return "";
   }
+  // pad that carries the polarity mark: "1" in most libraries; some name diode pads K/A, polarised caps +/-, BGA balls A1
+  const MARK = { k1: ["1", "K", "C", "CATHODE"], plus1: ["1", "+"], pin1: ["1", "A1"] };
+  function markPad(p) {
+    for (const n of MARK[p.pol] || []) { const q = p.pads.find(q => q[3] !== 2 && String(q[0]).toUpperCase() === n); if (q) return q; }
+    return null;
+  }
   function step(p) {
     if (p.tht) return 30;
     return (p.s === "B" ? 10 : 0) + baseStep(p);
@@ -118,6 +124,7 @@ globalThis.Enrich = (() => {
       p.tp = isTP(p) ? 1 : 0;
       p.skip = (p.tp || p.nobom || nothing(p)) ? 1 : 0;
       p.pol = p.skip ? "" : polarity(p, nm);
+      const mk = markPad(p); p.p1n = mk ? mk[0] : "1"; if (mk && !p.p1) p.p1 = [mk[4], mk[5]];
       p.fn = fnOf(p);
       p.nets = [...new Set(p.pads.map(q => q[1]).filter(Boolean))].sort();
       if (p.skip) continue;

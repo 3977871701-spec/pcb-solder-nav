@@ -18,8 +18,79 @@ globalThis.Files = (() => {
     const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream(fmt));
     return new Uint8Array(await new Response(s).arrayBuffer());
   }
-  const inflateRaw = u8 => pipe(u8, "deflate-raw");
-  const gunzip = u8 => pipe(u8, "gzip");
+  // pure-JS raw inflate (RFC 1951) for browsers without DecompressionStream / "deflate-raw" (Safari before iPadOS / iOS 16.4)
+  const LBASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  const LEXT = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  const DBASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  const DEXT = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  const CLORD = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+  // canonical Huffman table: code counts per length + symbols in code order
+  function huff(lens) {
+    const count = new Uint16Array(16), offs = new Uint16Array(16), sym = new Uint16Array(lens.length);
+    for (const l of lens) count[l]++;
+    count[0] = 0;
+    for (let i = 1; i < 16; i++) offs[i] = offs[i - 1] + count[i - 1];
+    for (let s = 0; s < lens.length; s++) if (lens[s]) sym[offs[lens[s]]++] = s;
+    return { count, sym };
+  }
+  let FIXED = null;
+  function inflateJS(src) {
+    let pos = 0, bb = 0, bc = 0, op = 0, out = new Uint8Array(Math.max(1024, src.length * 4));
+    const bad = () => { throw new Error("压缩数据损坏"); };
+    const bits = n => { while (bc < n) { if (pos >= src.length) bad(); bb |= src[pos++] << bc; bc += 8; } const v = bb & ((1 << n) - 1); bb >>>= n; bc -= n; return v; };
+    const room = n => { if (op + n <= out.length) return; const o = new Uint8Array(Math.max(out.length * 2, op + n)); o.set(out); out = o; };
+    const decode = h => { let code = 0, first = 0, index = 0; for (let len = 1; len < 16; len++) { code |= bits(1); const c = h.count[len]; if (code - first < c) return h.sym[index + code - first]; index += c; first = (first + c) << 1; code <<= 1; } return bad(); };
+    let last;
+    do {
+      last = bits(1); const type = bits(2);
+      if (type === 0) { // stored: skip to the byte boundary (leftover bits are always from the current byte)
+        bb = bc = 0; if (pos + 4 > src.length) bad();
+        const len = src[pos] | (src[pos + 1] << 8); pos += 4; if (pos + len > src.length) bad();
+        room(len); out.set(src.subarray(pos, pos + len), op); op += len; pos += len; continue;
+      }
+      let lit, dist;
+      if (type === 1) {
+        if (!FIXED) { const l = new Uint8Array(288).fill(8, 0, 144).fill(9, 144, 256).fill(7, 256, 280).fill(8, 280); FIXED = [huff(l), huff(new Uint8Array(30).fill(5))]; }
+        [lit, dist] = FIXED;
+      } else if (type === 2) {
+        const nl = bits(5) + 257, nd = bits(5) + 1, nc = bits(4) + 4, cl = new Uint8Array(19);
+        for (let i = 0; i < nc; i++) cl[CLORD[i]] = bits(3);
+        const ch = huff(cl), lens = new Uint8Array(nl + nd);
+        for (let i = 0; i < nl + nd;) {
+          const s = decode(ch);
+          if (s < 16) { lens[i++] = s; continue; }
+          let v = 0, rep;
+          if (s === 16) { if (!i) bad(); v = lens[i - 1]; rep = 3 + bits(2); } else rep = s === 17 ? 3 + bits(3) : 11 + bits(7);
+          if (i + rep > nl + nd) bad();
+          while (rep--) lens[i++] = v;
+        }
+        lit = huff(lens.subarray(0, nl)); dist = huff(lens.subarray(nl));
+      } else bad();
+      for (;;) {
+        let s = decode(lit);
+        if (s < 256) { room(1); out[op++] = s; continue; }
+        if (s === 256) break;
+        s -= 257; if (s >= 29) bad();
+        const len = LBASE[s] + bits(LEXT[s]), ds = decode(dist); if (ds >= 30) bad();
+        const d = DBASE[ds] + bits(DEXT[ds]); if (d > op) bad();
+        room(len); for (let k = 0; k < len; k++, op++) out[op] = out[op - d];
+      }
+    } while (!last);
+    return out.slice(0, op);
+  }
+  // gzip member → its raw deflate body
+  function gzBody(u8) {
+    if (u8[0] !== 0x1f || u8[1] !== 0x8b || u8[2] !== 8) throw new Error("不是 gzip 数据");
+    const fl = u8[3]; let p = 10;
+    if (fl & 4) p += 2 + (u8[p] | (u8[p + 1] << 8));
+    if (fl & 8) { while (u8[p]) p++; p++; }
+    if (fl & 16) { while (u8[p]) p++; p++; }
+    if (fl & 2) p += 2;
+    return u8.subarray(p);
+  }
+  const hasDS = typeof DecompressionStream === "function";
+  const inflateRaw = async u8 => { if (hasDS) try { return await pipe(u8, "deflate-raw"); } catch (e) { /* format not supported here: fall through */ } return inflateJS(u8); };
+  const gunzip = async u8 => { if (hasDS) try { return await pipe(u8, "gzip"); } catch (e) { /* fall through */ } return inflateJS(gzBody(u8)); };
 
   // zip: returns [{name, size, read: async () => Uint8Array}]
   function unzip(u8) {
@@ -170,5 +241,5 @@ globalThis.Files = (() => {
     }
     return rows;
   }
-  return { decodeText, startsWith, inflateRaw, gunzip, unzip, untar, unZ, xml, X, csv, xlsx, unesc };
+  return { decodeText, startsWith, inflateRaw, inflateJS, gunzip, unzip, untar, unZ, xml, X, csv, xlsx, unesc };
 })();

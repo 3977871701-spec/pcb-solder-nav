@@ -6,7 +6,8 @@
 <title>PCB 焊接导航</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<!-- fonts load without blocking the page: where Google is unreachable (mainland China without VPN) the system fonts are used right away -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: workbench split — board drawing (sticky, pan/zoom) on the left, solder-step checklist on the right; stacks on phones. */
 :root {
@@ -123,7 +124,8 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .card { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 5; background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 24px var(--shadow); display: grid; gap: 4px; font-size: 13px; max-height: calc(100vh - 24px); overflow-y: auto; }
-@media (max-width: 900px) { .card { position: relative; top: 0; max-height: none; } }
+/* phones: the card is a bottom sheet so a tapped pad's info shows while the board stays in view */
+@media (max-width: 900px) { .card { position: fixed; top: auto; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-height: 42vh; z-index: 40; } }
 .card .row1 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding-right: 20px; }
 .card .ref { font-family: var(--font-mono); font-weight: 600; font-size: 18px; color: var(--accent); }
 .card .nm { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
@@ -139,6 +141,12 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .pins b, .nchips b { color: var(--pin1); font-weight: 600; }
 .nchips { display: flex; flex-wrap: wrap; gap: 2px 4px; font-family: var(--font-mono); font-size: 12px; }
 .netname { font-family: var(--font-mono); font-weight: 600; color: var(--net); font-size: 15px; overflow-wrap: anywhere; }
+.nchips.nb button span { font-size: 11px; }
+.nchips.nb .same span { color: var(--done); }
+.nchips.nb .diff { background: var(--warn-bg); }
+.nchips.nb .diff span, .card .bad { color: var(--warn); font-weight: 600; }
+.nchips.nb .nc span { color: var(--muted); }
+.ring.nb { stroke: var(--warn); stroke-width: 1.5px; stroke-dasharray: 3 2; animation: none; }
 .side { display: grid; gap: 14px; min-width: 0; }
 .summary { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
 .summary .nums { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); }
@@ -152,6 +160,17 @@ select.tbtn { padding: 4px 6px; background: var(--panel); }
 .step { display: grid; gap: 6px; }
 .step h2 { margin: 6px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 16px; display: flex; gap: 10px; align-items: baseline; text-wrap: balance; }
 .step h2 .no { font-family: var(--font-mono); font-size: 12px; color: var(--bg); background: var(--fg); border-radius: 4px; padding: 1px 6px; }
+.step h2 .cnt { margin-left: auto; font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.step.fin h2 .cnt { color: var(--done); }
+.step.fin h2 .no { background: var(--done); }
+.pwr { display: grid; gap: 4px; }
+.prow { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 8px; }
+.prow input { width: 16px; height: 16px; margin: 0; accent-color: var(--done); cursor: pointer; flex: none; }
+.prow .hint { margin-left: auto; }
+.pnet { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--net); border: 0; background: transparent; padding: 0 2px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.pnet:hover { text-decoration: underline; }
+.prow.ok .pnet { color: var(--done); }
+.pnet.gnd { color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 12px; }
 .step > p { margin: 0 0 2px; color: var(--muted); font-size: 12.5px; max-width: 65ch; }
 .grp { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 9px 11px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; cursor: pointer; }
 .grp:hover { border-color: var(--muted); }
@@ -196,6 +215,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 .howto code { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
 .dropmask { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--accent-soft); border: 3px dashed var(--accent); font-family: var(--font-display); font-size: 22px; color: var(--accent); pointer-events: none; backdrop-filter: blur(2px); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px)); box-shadow: 0 6px 24px var(--shadow); white-space: pre-line; }
+.toast button { margin-left: 12px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 5px; padding: 1px 10px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.top .theme { margin-left: auto; align-self: start; }
 </style>
 
 <input type="file" id="inDir" webkitdirectory directory multiple hidden>
@@ -207,6 +228,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。支持 KiCad、嘉立创EDA、Altium、Cadence Allegro、ODB++ 和 Gerber。文件只在你的浏览器里解析，不会上传。</p>
   </div>
   <div class="tabs" role="tablist" id="tabs" hidden></div>
+  <button type="button" class="tbtn theme" id="themeBtn" title="配色：跟随系统 / 浅色 / 深色">◐ 跟随系统</button>
 </div>
 
 <section class="empty" id="empty">
@@ -218,6 +240,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <button type="button" class="tbtn" id="pickFiles">选择文件 / 压缩包</button>
       <button type="button" class="tbtn" id="loadDemo">打开示例板</button>
     </div>
+    <p class="hint" id="iosTip" hidden>iPad / iPhone 不能直接选文件夹：在“文件”App 里长按工程文件夹 → “压缩”，再点上面的按钮选这个 zip。</p>
     <p class="hint" id="loadMsg"></p>
     <div class="notes" id="notesEmpty" hidden></div>
   </div>
@@ -240,7 +263,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <ul>
       <li>按焊接顺序分步：细间距芯片 → 小封装 → 阻容 → 有极性件 → 大件 → 开关 → 底面 → 插件</li>
       <li>标出 1 脚、二极管阴极、电解/钽电容正极，并用文字说出朝哪边</li>
-      <li>“测引脚”：点任意焊盘看是哪个器件第几脚、接什么网络、和哪些点应导通</li>
+      <li>“测引脚”：点任意焊盘看是哪个器件第几脚、接什么网络、和哪些点应导通；相邻焊盘哪些不能连锡</li>
+      <li>上电前检查：列出所有电源网络，逐个量对地电阻，排除短路再通电</li>
       <li>勾选进度和读入的板子保存在本机浏览器，下次打开还在</li>
     </ul>
   </div>
@@ -290,6 +314,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <span><i style="background:var(--pin1)"></i>1 脚 / 阴极 K / 正极 +</span>
       <span><i style="background:var(--done)"></i>已焊</span>
       <span><i style="background:var(--net)"></i>同网络（测引脚）</span>
+      <span><i style="border:1.5px dashed var(--warn); border-radius:50%"></i>相邻异网，防连锡</span>
       <span><i style="border:1px dashed var(--muted)"></i>DNP 不焊</span>
     </div>
   </section>
@@ -301,10 +326,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <div class="src" id="src"></div>
       <div class="warnbox" id="warn" hidden></div>
       <div class="search">
-        <input id="q" type="search" placeholder="位号 C14 / 引脚 U1.23 / 网络 GND" autocomplete="off">
+        <input id="q" type="search" placeholder="位号 C14 / 引脚 U1.23 / 网络 GND" autocomplete="off" list="qlist">
+        <datalist id="qlist"></datalist>
         <button type="button" class="tbtn" id="clr">清除</button>
       </div>
       <div class="row">
+        <button type="button" class="tbtn" id="hideDone" aria-pressed="false" title="列表里不显示已经焊完的种类">隐藏已焊完</button>
         <button type="button" class="tbtn" id="copyBom">复制分步 BOM</button>
         <button type="button" class="tbtn" id="resetProg">清空进度</button>
         <button type="button" class="tbtn" id="rmBoard">移除这块板</button>
@@ -317,10 +344,15 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
       <p>点板上任意焊盘：卡片显示它是哪个器件第几脚、接哪个网络，同网络的其他焊盘标成紫色。万用表通断档一支表笔放在选中焊盘，另一支放任一紫色焊盘应导通。</p>
       <div class="tps" id="tps"></div>
     </section>
+    <section class="step" id="pwrSec" hidden>
+      <h2>上电前检查<span class="cnt" id="pwrCnt"></span></h2>
+      <p>焊完先别通电。万用表电阻档，一支表笔放地，另一支依次量下面每个电源网络：读数接近 0 Ω 就是短路（连锡、器件焊反或焊错料），查清再上电。量过的打勾；点名称在板上标出这个网络。</p>
+      <div class="pwr" id="pwr"></div>
+    </section>
     <div class="notes" id="notes" hidden></div>
     <div id="steps" class="side"></div>
     <div class="foot">
-      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>D</kbd> 双面对照　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
+      <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>U</kbd> / <kbd>Ctrl+Z</kbd> 撤销　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>D</kbd> 双面对照　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
       <p>极性按常见封装库惯例（KiCad、立创、Altium）判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
       <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
     </div>
