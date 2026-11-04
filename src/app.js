@@ -128,7 +128,7 @@ function showNotes(msgs) {
 function filesToList(files) { return [...files].map(f => fileEntry(f)); }
 // iPad / iPhone cannot pick folders (iPadOS reports itself as a Mac with touch): offer files / zip only and say how to zip a folder
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-if (IOS) { $("#pickDir").hidden = true; $("#pickFiles").classList.add("primary"); $("#iosTip").hidden = false; $("#drop h2").textContent = "选择工程 zip 或文件"; }
+if (IOS) { $("#pickDir").hidden = true; $("#pickFiles").classList.add("primary"); $("#iosTip").hidden = false; $("#drop h2").textContent = "选择工程 zip / rar 或文件"; }
 $("#inDir").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
 $("#inFiles").onchange = e => { ingest(filesToList(e.target.files)); e.target.value = ""; };
 $("#pickDir").onclick = () => $("#inDir").click();
@@ -751,7 +751,7 @@ function renderTabs() {
   }
   // the folder picker cannot select a zip, so files / zip get their own button (the only one on iPad / iPhone)
   const add = (k, s, input) => { const a = document.createElement("button"); a.type = "button"; a.className = "add"; a.innerHTML = `<span class="k">${k}</span><span class="s">${s}</span>`; a.onclick = () => $(input).click(); tabs.appendChild(a); };
-  add("＋ 添加", IOS ? "文件 / zip（文件夹先压缩）" : "文件 / zip", "#inFiles");
+  add("＋ 添加", IOS ? "文件 / zip / rar（文件夹先压缩）" : "文件 / zip / rar", "#inFiles");
   if (!IOS) add("＋ 文件夹", "整个工程目录", "#inDir");
 }
 function openBoard(key) {

@@ -24,7 +24,9 @@
 
 读入方式：把文件夹、zip 或单个文件拖进页面，或点“＋ 添加”（文件 / zip）、“＋ 文件夹”。一个文件夹里有几块板就读出几块，同目录的 BOM、坐标文件、网表会自动配上。
 
-**iPad / iPhone**：Safari 不能选文件夹。在“文件”App 里长按工程文件夹 → “压缩”，再点“＋ 添加”选这个 zip。老版本 iPadOS（16.4 以前）也能解压，页面自带解压代码。
+**压缩包**：zip、rar（RAR5，WinRAR 5 以后的默认格式）、tar / tgz 都能直接读，压缩包里套压缩包也行。解压代码是页面自带的，不依赖浏览器。老的 RAR4 格式、带密码或分卷的压缩包读不了，页面会提示。
+
+**iPad / iPhone**：Safari 不能选文件夹。点“＋ 添加”直接选 zip 或 rar；要传整个文件夹，先在“文件”App 里长按文件夹 → “压缩”。
 
 ## 支持的文件
 
@@ -91,7 +93,7 @@
 源码在 `src/`，`node build.js` 把它们打包成单文件 `index.html`（没有依赖）。
 
 ```
-src/core/      geom 几何、files 解压(zip/tar/gzip/.Z)/XML/CSV/XLSX、tables BOM/坐标/IPC-356/飞针、project 文件归组
+src/core/      geom 几何、files 解压(zip/tar/gzip/.Z)/XML/CSV/XLSX、rar RAR5 解压、tables BOM/坐标/IPC-356/飞针、project 文件归组
 src/import/    kicad、ipc2581、easyeda、altium、odb、gerber(含 Excellon)、fab(Gerber 套件拼装)
 src/enrich.js  焊接分步、极性、分组
 src/app.js     界面

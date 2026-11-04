@@ -216,7 +216,10 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 .dropmask { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--accent-soft); border: 3px dashed var(--accent); font-family: var(--font-display); font-size: 22px; color: var(--accent); pointer-events: none; backdrop-filter: blur(2px); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px)); box-shadow: 0 6px 24px var(--shadow); white-space: pre-line; }
 .toast button { margin-left: 12px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 5px; padding: 1px 10px; cursor: pointer; font-weight: 600; white-space: nowrap; }
-.top .theme { margin-left: auto; align-self: start; }
+/* theme switch sits in the top-right corner so a long row of board tabs never pushes it onto its own line */
+.top { position: relative; }
+.top .theme { position: absolute; top: 0; right: 0; }
+.brand { padding-right: 120px; }
 </style>
 
 <input type="file" id="inDir" webkitdirectory directory multiple hidden>
@@ -234,13 +237,13 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 <section class="empty" id="empty">
   <div class="drop" id="drop">
     <h2>把工程文件夹拖到这里</h2>
-    <p>文件夹、zip、单个文件都行。里面有几块板就读出几块；同目录的 BOM、坐标文件、网表会自动配上。</p>
+    <p>文件夹、zip / rar 压缩包、单个文件都行。里面有几块板就读出几块；同目录的 BOM、坐标文件、网表会自动配上。</p>
     <div class="row">
       <button type="button" class="tbtn primary" id="pickDir">选择文件夹</button>
-      <button type="button" class="tbtn" id="pickFiles">选择文件 / 压缩包</button>
+      <button type="button" class="tbtn" id="pickFiles">选择文件 / 压缩包（zip、rar）</button>
       <button type="button" class="tbtn" id="loadDemo">打开示例板</button>
     </div>
-    <p class="hint" id="iosTip" hidden>iPad / iPhone 不能直接选文件夹：在“文件”App 里长按工程文件夹 → “压缩”，再点上面的按钮选这个 zip。</p>
+    <p class="hint" id="iosTip" hidden>iPad / iPhone 不能直接选文件夹：在“文件”App 里长按工程文件夹 → “压缩”，再点上面的按钮选这个 zip（rar 也能直接选）。</p>
     <p class="hint" id="loadMsg"></p>
     <div class="notes" id="notesEmpty" hidden></div>
   </div>

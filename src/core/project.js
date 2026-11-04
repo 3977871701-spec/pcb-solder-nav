@@ -13,14 +13,14 @@ globalThis.Project = (() => {
     for (const e of entries) {
       if (SKIP.test(e.path)) continue;
       const x = ext(e.path);
-      if (/^(zip|epro|epro2|tgz|tar|gz|odb)$/.test(x) && depth < 4) {
+      if (/^(zip|epro|epro2|tgz|tar|gz|odb|rar)$/.test(x) && depth < 4) {
         try { // decide by content, not by extension (KiCad writes zip data into ".tgz" files, for example)
           let u8 = await e.read();
           if (u8[0] === 0x1f && u8[1] === 0x8b) u8 = await Files.gunzip(u8);
           const isTarData = u8.length > 262 && String.fromCharCode(...u8.subarray(257, 262)) === "ustar";
-          const list = (u8[0] === 0x50 && u8[1] === 0x4b) ? Files.unzip(u8) : isTarData ? Files.untar(u8) : null;
+          const list = (u8[0] === 0x50 && u8[1] === 0x4b) ? Files.unzip(u8) : Rar.isRar(u8) ? Rar.list(u8) : isTarData ? Files.untar(u8) : null;
           if (!list) { out.push(e); continue; }
-          const base = e.path.replace(/\.(zip|epro2?|tgz|tar\.gz|tar|gz|odb)$/i, "") + "/";
+          const base = e.path.replace(/\.(zip|epro2?|tgz|tar\.gz|tar|gz|odb|rar)$/i, "") + "/";
           out.push(...await expand(list.map(z => ({ path: base + z.name, read: z.read, size: z.size, inArchive: e.path })), depth + 1));
           continue;
         } catch (err) { out.push({ path: e.path, read: e.read, error: "无法解压：" + err.message }); continue; }
@@ -142,7 +142,10 @@ globalThis.Project = (() => {
       add(r.board, { path: (r.src || r.grp) + "#" + (r.uuid || ""), name: several ? `${projOf(r)} · ${own}` : own, source: "嘉立创EDA专业版", time: r.time });
     }
     const day = t => t ? new Date(t).toISOString().slice(0, 10) : "";
-    for (const [k, list] of Object.entries(older)) { const n = newest[k]; notes.push(`${n.title || k} 有 ${list.length + 1} 个版本，用的是最新编辑的那份（${baseOf(n.src || n.grp)}${n.time ? "，" + day(n.time) : ""}），较旧的 ${list.map(r => baseOf(r.src || r.grp) + (r.time ? "（" + day(r.time) + "）" : "")).slice(0, 3).join("、")} 已跳过`); }
+    const olderAll = Object.entries(older);
+    // a whole-project file repeating every board would give one line per board: summarise instead
+    if (olderAll.length > 3) notes.push(`${olderAll.length} 块板（${olderAll.slice(0, 4).map(([k]) => newest[k].title || k).join("、")} 等）在几个文件里都有，各自用最新编辑的那份，较旧的（例如 ${baseOf(olderAll[0][1][0].src || olderAll[0][1][0].grp)}）已跳过`);
+    else for (const [k, list] of olderAll) { const n = newest[k]; notes.push(`${n.title || k} 有 ${list.length + 1} 个版本，用的是最新编辑的那份（${baseOf(n.src || n.grp)}${n.time ? "，" + day(n.time) : ""}），较旧的 ${list.map(r => baseOf(r.src || r.grp) + (r.time ? "（" + day(r.time) + "）" : "")).slice(0, 3).join("、")} 已跳过`); }
     if (archived.length) notes.push(`跳过 ${archived.length} 块标记为历史/归档的板：${[...new Set(archived)].join("、")}`);
     if (noFoot.length) notes.push(`${noFoot.length} 个嘉立创 PCB 文档缺少封装数据（例如 ${baseOf(noFoot[0])}），已跳过。请在嘉立创EDA里用“文件 → 导出 → 工程”导出完整的 .epro2 再拖进来。`);
     for (const c of C.filter(c => c.kind === "easystd")) {
@@ -222,7 +225,12 @@ globalThis.Project = (() => {
     }
 
     // ---- drop duplicates: the same design as Gerber next to its source file, or the same Gerbers twice (folder + zip) ----
-    const sig = b => { const B = b.board; return { refs: new Set(B.parts.map(p => p.r)), pos: Object.fromEntries(B.parts.map(p => [p.r, p.c])), w: B.bbox[2] - B.bbox[0], h: B.bbox[3] - B.bbox[1] }; };
+    const sig = b => { const B = b.board, xs = B.parts.map(p => p.c[0]), ys = B.parts.map(p => p.c[1]); return { refs: new Set(B.parts.map(p => p.r)), pos: Object.fromEntries(B.parts.map(p => [p.r, p.c])), w: B.bbox[2] - B.bbox[0], h: B.bbox[3] - B.bbox[1], pw: Math.max(...xs) - Math.min(...xs), ph: Math.max(...ys) - Math.min(...ys), src: b.source }; };
+    // outlines may differ between formats (an Altium export's board shape vs the 嘉立创 FPC outline), so across formats the parts' extent decides
+    const sameSize = (s, t) => (Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2) || (s.src !== t.src && Math.abs(s.pw - t.pw) < 0.5 && Math.abs(s.ph - t.ph) < 0.5);
+    // same board in several design formats: keep the native one
+    const PREF = ["KiCad", "嘉立创EDA专业版", "Altium", "嘉立创EDA标准版", "IPC-2581", "ODB++"];
+    const pref = b => { const i = PREF.findIndex(s => b.source.startsWith(s)); return i < 0 ? PREF.length : i; };
     // same board = most shared designators sit at the same place (after allowing for a different origin)
     const samePlacement = (s, t, common) => {
       const dx = common.map(r => t.pos[r][0] - s.pos[r][0]).sort((a, b) => a - b), dy = common.map(r => t.pos[r][1] - s.pos[r][1]).sort((a, b) => a - b);
@@ -231,14 +239,21 @@ globalThis.Project = (() => {
       return hit >= 0.7 * common.length;
     };
     const rank = b => (b.path.endsWith("#fab") ? (b.board.noNets ? 0 : 1) : 2) - (/(^|\/)(work|tmp|temp|backup|old|review|snapshots?|sim)(\/|#|$)/i.test(b.path) ? 0.5 : 0);
-    const keep = [], merged = {};
-    for (const b of boards.slice().sort((x, y) => rank(y) - rank(x))) {
+    const keep = [], merged = {}, twins = {};
+    for (const b of boards.slice().sort((x, y) => rank(y) - rank(x) || pref(x) - pref(y))) {
       const s = sig(b);
-      const dup = keep.find(k => { const t = sig(k); const common = [...s.refs].filter(r => t.refs.has(r)); return common.length >= 0.7 * Math.min(s.refs.size, t.refs.size) && Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2 && samePlacement(s, t, common); });
-      if (dup) { if (rank(b) < 2 && rank(dup) === 2) (merged[baseOf(dup.path.replace(/#.*$/, ""))] ||= []).push(b.path.replace(/#.*$/, "")); continue; }
+      const dup = keep.find(k => { const t = sig(k); const common = [...s.refs].filter(r => t.refs.has(r)); return common.length >= 0.7 * Math.min(s.refs.size, t.refs.size) && sameSize(s, t) && samePlacement(s, t, common); });
+      if (dup) {
+        if (rank(b) < 2 && rank(dup) === 2) (merged[baseOf(dup.path.replace(/#.*$/, ""))] ||= []).push(b.path.replace(/#.*$/, ""));
+        else if (b.source !== dup.source) (twins[b.source + "\n" + dup.source] ||= []).push(b.name);
+        continue;
+      }
       keep.push(b);
     }
-    for (const [src, list] of Object.entries(merged)) notes.push(`另有 ${list.length} 份 Gerber 和设计文件 ${src} 是同一块板（例如 ${list[0]}），已直接使用设计文件`);
+    const mg = Object.entries(merged);
+    if (mg.length > 2) notes.push(`另有 ${mg.reduce((a, [, l]) => a + l.length, 0)} 份 Gerber 和 ${mg.length} 个设计文件是同一块板（例如 ${mg[0][1][0]}），已直接使用设计文件`);
+    else for (const [src, list] of mg) notes.push(`另有 ${list.length} 份 Gerber 和设计文件 ${src} 是同一块板（例如 ${list[0]}），已直接使用设计文件`);
+    for (const [k, list] of Object.entries(twins)) { const [from, to] = k.split("\n"); notes.push(`${list.length} 块 ${from} 板（${list.slice(0, 4).join("、")}${list.length > 4 ? " 等" : ""}）和 ${to} 里的是同一块板，只保留 ${to}`); }
     // exact copies (same placement) collapse silently; different revisions with the same name get their folder appended
     const exact = new Set(), uniq = [];
     for (const b of keep) { const k = b.board.parts.map(p => p.r + ":" + p.c.join(",")).sort().join("|"); if (exact.has(k)) continue; exact.add(k); uniq.push(b); }
