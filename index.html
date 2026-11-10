@@ -2801,11 +2801,12 @@ globalThis.Project = (() => {
     // EasyEDA: group docs by archive / directory
     const ee = {};
     for (const c of C.filter(c => c.kind === "easyeda")) (ee[c.entry.inArchive || c.dir] ||= []).push(c);
-    const noFoot = [], archived = [], eeAll = [];
+    const noFoot = [], archived = [], eeAll = [], noPcb = [];
     const ARCHIVE = /archive|历史|归档|废弃|作废|obsolete|deprecated/i;
     for (const [grp, list] of Object.entries(ee)) {
       try {
         const res = ImpEasyEDA.parseProject(list.map(c => ({ text: c.text(), name: c.path })));
+        if (!res.length) noPcb.push(grp); // schematic-only export: symbols, devices and footprints but no PCB document
         for (const r of res) {
           if (!r.comps) continue;
           if (r.padCoverage < 0.5) { noFoot.push(r.src || grp); continue; } // PCB without its footprints (bare .epcb snapshot)
@@ -2831,6 +2832,7 @@ globalThis.Project = (() => {
     if (olderAll.length > 3) notes.push(`${olderAll.length} 块板（${olderAll.slice(0, 4).map(([k]) => newest[k].title || k).join("、")} 等）在几个文件里都有，各自用最新编辑的那份，较旧的（例如 ${baseOf(olderAll[0][1][0].src || olderAll[0][1][0].grp)}）已跳过`);
     else for (const [k, list] of olderAll) { const n = newest[k]; notes.push(`${n.title || k} 有 ${list.length + 1} 个版本，用的是最新编辑的那份（${baseOf(n.src || n.grp)}${n.time ? "，" + day(n.time) : ""}），较旧的 ${list.map(r => baseOf(r.src || r.grp) + (r.time ? "（" + day(r.time) + "）" : "")).slice(0, 3).join("、")} 已跳过`); }
     if (archived.length) notes.push(`跳过 ${archived.length} 块标记为历史/归档的板：${[...new Set(archived)].join("、")}`);
+    if (noPcb.length) notes.push(`${baseOf(noPcb[0])}${noPcb.length > 1 ? ` 等 ${noPcb.length} 个嘉立创文件` : ""}里只有原理图、符号和封装，没有 PCB 文档，所以读不出板子。请在嘉立创EDA里打开 PCB 后用“文件 → 导出 → 工程”导出整个工程（文件名以 ProPrj_ 开头的 .epro2），不要只导出原理图文档（ProDoc_）。`);
     if (noFoot.length) notes.push(`${noFoot.length} 个嘉立创 PCB 文档缺少封装数据（例如 ${baseOf(noFoot[0])}），已跳过。请在嘉立创EDA里用“文件 → 导出 → 工程”导出完整的 .epro2 再拖进来。`);
     for (const c of C.filter(c => c.kind === "easystd")) {
       try { add(ImpEasyStd.parse(JSON.parse(c.text()), baseOf(c.path)), { path: c.path, name: stemOf(c.path).replace(/^PCB_(PCB_)?/, ""), source: "嘉立创EDA标准版" }); designDirs.push(c.dir); }
