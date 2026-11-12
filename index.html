@@ -33,36 +33,44 @@
   color-scheme: dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; }
-button, select { font: inherit; color: inherit; }
+body { background: radial-gradient(circle at 8% -10%, var(--accent-soft), transparent 32rem), var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+button, select, input { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.top { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 24px; margin-bottom: 14px; }
-.brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0; letter-spacing: .02em; line-height: 1.2; }
-.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
-.tabs { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 3px; align-items: stretch; }
-.tabs button { border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
-.tabs button .k { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
+.top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 14px 20px; margin-bottom: 16px; }
+.brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 26px; margin: 0; letter-spacing: .02em; line-height: 1.2; }
+.brand p { margin: 5px 0 0; color: var(--muted); font-size: 13px; max-width: 76ch; }
+.top-actions { display: flex; gap: 7px; align-items: center; }
+.top-actions .sync { display: inline-flex; align-items: center; gap: 6px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.sync.online .sync-dot { background: var(--done); }
+.sync.busy .sync-dot { background: var(--warn); animation: pulse 1s infinite; }
+.sync.error .sync-dot { background: var(--accent); }
+.tabs { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 5px; align-items: stretch; box-shadow: 0 4px 18px color-mix(in srgb, var(--shadow) 35%, transparent); scrollbar-width: thin; }
+.tabs button { border: 0; background: transparent; padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; flex: none; flex-direction: column; align-items: flex-start; line-height: 1.25; max-width: 260px; }
+.tabs button .k { font-family: var(--font-mono); font-weight: 600; font-size: 13px; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs button .s { font-size: 11px; color: var(--muted); }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
 .tabs button[aria-selected="true"] .s { color: inherit; opacity: .75; }
-.tabs button { position: relative; padding-right: 26px; }
-.tabs .del { position: absolute; top: 3px; right: 4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; font-size: 13px; line-height: 18px; text-align: center; color: inherit; opacity: .45; cursor: pointer; }
+.tabs button { position: relative; padding-right: 28px; }
+.tabs .del { position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 5px; font-size: 14px; line-height: 20px; text-align: center; color: inherit; opacity: .5; cursor: pointer; }
 .tabs .del:hover { opacity: 1; background: var(--accent-soft); }
 .tabs .del.armed { opacity: 1; background: var(--accent); color: var(--panel); font-size: 11px; }
 .tabs .add { padding-right: 12px; border: 1px dashed var(--muted); justify-content: center; color: var(--muted); }
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 16px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 410px); gap: 18px; align-items: start; }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-.stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 32px color-mix(in srgb, var(--shadow) 45%, transparent); }
 @media (max-width: 900px) { .stage { position: relative; top: 0; } }
-.toolbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; font-size: 13px; }
 .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
-.tbtn { border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 13px; min-width: 32px; }
+.tbtn { border: 1px solid var(--line); background: transparent; border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 13px; min-width: 34px; min-height: 32px; }
 .tbtn[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 .tbtn:hover:not([aria-pressed="true"]), .seg button:hover:not([aria-pressed="true"]) { background: var(--accent-soft); }
-.tbtn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.tbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tbtn.danger { color: var(--accent); }
 select.tbtn { padding: 4px 6px; background: var(--panel); }
 .spacer { flex: 1; }
 .hint { color: var(--muted); font-size: 12px; }
@@ -216,10 +224,98 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 .dropmask { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--accent-soft); border: 3px dashed var(--accent); font-family: var(--font-display); font-size: 22px; color: var(--accent); pointer-events: none; backdrop-filter: blur(2px); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px)); box-shadow: 0 6px 24px var(--shadow); white-space: pre-line; }
 .toast button { margin-left: 12px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 5px; padding: 1px 10px; cursor: pointer; font-weight: 600; white-space: nowrap; }
-/* theme switch sits in the top-right corner so a long row of board tabs never pushes it onto its own line */
-.top { position: relative; }
-.top .theme { position: absolute; top: 0; right: 0; }
-.brand { padding-right: 120px; }
+.summary { border-radius: 14px; box-shadow: 0 5px 20px color-mix(in srgb, var(--shadow) 28%, transparent); }
+dialog { width: min(620px, calc(100vw - 28px)); max-height: min(760px, calc(100dvh - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--fg); box-shadow: 0 24px 80px var(--shadow); overflow: auto; }
+dialog::backdrop { background: #07110bcc; backdrop-filter: blur(4px); }
+.dialog-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.dialog-head h2 { margin: 0; font: 600 20px var(--font-display); }
+.dialog-head .x { margin-left: auto; }
+.dialog-body { padding: 16px 18px 20px; display: grid; gap: 14px; }
+.dialog-body p { margin: 0; color: var(--muted); }
+.board-list { display: grid; gap: 8px; }
+.board-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); }
+.board-open { min-width: 0; border: 0; background: transparent; text-align: left; padding: 5px 7px; cursor: pointer; border-radius: 6px; }
+.board-open:hover { background: var(--accent-soft); }
+.board-open b, .board-open span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-open span { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.board-item.current { border-color: var(--accent); }
+.field { display: grid; gap: 5px; }
+.field span { font-size: 12px; color: var(--muted); }
+.field input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); padding: 8px 10px; }
+.auth-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.cloud-status { border-radius: 8px; padding: 9px 11px; background: var(--bg); color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+details { border-top: 1px solid var(--line); padding-top: 12px; }
+summary { cursor: pointer; font-weight: 600; }
+details .field { margin-top: 10px; }
+.sch-dialog { width: min(1480px, calc(100vw - 28px)); height: min(940px, calc(100dvh - 28px)); max-height: calc(100dvh - 28px); overflow: hidden; }
+.sch-dialog .dialog-head { position: relative; }
+.sch-layout { display: grid; grid-template-columns: 225px minmax(0, 1fr); height: calc(100% - 67px); min-height: 0; }
+.sch-sidebar { min-width: 0; border-right: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.sch-sidebar h3 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; }
+.sch-sidebar h3 span { color: var(--muted); font-weight: 400; }
+.sch-library-list { display: grid; gap: 8px; overflow-y: auto; min-height: 0; }
+.sch-library-item { border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: grid; gap: 4px; background: var(--bg); }
+.sch-library-item.current { border-color: var(--accent); }
+.sch-sheet-open { border: 0; background: transparent; text-align: left; padding: 4px; cursor: pointer; min-width: 0; }
+.sch-sheet-open b, .sch-sheet-open span { display: block; overflow-wrap: anywhere; }
+.sch-sheet-open span { color: var(--muted); font-size: 11px; }
+.sch-library-item .tbtn { min-height: 27px; justify-self: end; font-size: 12px; }
+.sch-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.sch-tools { padding: 9px 12px; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.sch-tools .search { flex: 1; min-width: 190px; }
+.sch-search-results { display: flex; flex-wrap: wrap; gap: 5px; max-height: 136px; overflow-y: auto; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.sch-search-results:empty { display: none; }
+.sch-search-results button { text-align: left; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 4px 8px; cursor: pointer; }
+.sch-search-results button:hover { border-color: var(--accent); }
+.sch-search-results b, .sch-search-results span { display: block; }
+.sch-search-results span, .sch-search-results p { font-size: 12px; color: var(--muted); margin: 0; }
+.sch-drawing-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; flex: 1; min-height: 0; }
+.sch-canvas { position: relative; min-width: 0; min-height: 0; background: #e2e7e2; }
+#schSvg { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; cursor: grab; }
+#schSvg text { font-family: "Times New Roman", "PingFang SC", sans-serif; }
+.sch-component { cursor: pointer; }
+.sch-port, .sch-wire { cursor: pointer; }
+.sch-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 30px; color: #59685e; }
+.sch-empty h3 { margin: 0 0 8px; font-size: 20px; }
+.sch-empty p { margin: 0; max-width: 40ch; }
+.sch-inspector { border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+.sch-inspector h3 { font: 600 22px var(--font-display); margin: 0; color: var(--accent); overflow-wrap: anywhere; }
+.sch-inspector p { color: var(--muted); font-size: 13px; }
+.sch-inspector .sch-value { color: var(--fg); font-size: 16px; overflow-wrap: anywhere; }
+.sch-inspector dl { display: grid; grid-template-columns: minmax(70px, auto) minmax(0, 1fr); gap: 6px 10px; font-size: 12px; }
+.sch-inspector dt { color: var(--muted); }
+.sch-inspector dd { margin: 0; overflow-wrap: anywhere; }
+.sch-inspector .tbtn { font-size: 11px; margin: 2px; }
+.sch-file { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; margin-top: auto; }
+@media (max-width: 950px) { .sch-layout { grid-template-columns: 175px minmax(0, 1fr); } .sch-drawing-layout { grid-template-columns: minmax(0, 1fr) 190px; } .sch-inspector { padding: 10px; } }
+@media (max-width: 650px) {
+  .sch-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; max-width: none; border-radius: 0; }
+  .sch-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .sch-sidebar { border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; }
+  .sch-sidebar h3 { display: none; }
+  .sch-library-list { display: flex; overflow-x: auto; max-height: 92px; }
+  .sch-library-item { min-width: 145px; }
+  .sch-library-item .tbtn { min-height: 23px; padding-block: 1px; }
+  .sch-drawing-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; }
+  .sch-inspector { border-left: 0; border-top: 1px solid var(--line); max-height: 29dvh; }
+  .sch-tools { padding: 6px; gap: 5px; }
+  .sch-tools .search { min-width: 145px; }
+  .sch-tools .tbtn { min-height: 28px; padding: 3px 7px; }
+  .sch-file { display: none; }
+}
+@media (max-width: 600px) {
+  body { padding-inline: max(10px, env(safe-area-inset-left, 0px)); padding-top: 12px; }
+  .top { grid-template-columns: 1fr; gap: 10px; }
+  .top-actions { flex-wrap: wrap; grid-row: 2; }
+  .brand h1 { font-size: 23px; }
+  .brand p { font-size: 12px; }
+  .tabs { grid-row: 3; }
+  .toolbar { padding: 7px; }
+  .hint#hint { display: none; }
+  .svgwrap { height: 56vh; min-height: 330px; }
+  .auth-grid { grid-template-columns: 1fr; }
+  .dialog-head, .dialog-body { padding-inline: 14px; }
+}
 </style>
 
 <input type="file" id="inDir" webkitdirectory directory multiple hidden>
@@ -228,10 +324,15 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 <div class="top">
   <div class="brand">
     <h1>PCB 焊接导航</h1>
-    <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。支持 KiCad、嘉立创EDA、Altium、Cadence Allegro、ODB++ 和 Gerber。文件只在你的浏览器里解析，不会上传。</p>
+    <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。右上角“原理图库”可查看 AD .SchDoc。原始文件只在浏览器里解析，不会上传。</p>
+  </div>
+  <div class="top-actions">
+    <button type="button" class="tbtn" id="boardsBtn">板子管理</button>
+    <button type="button" class="tbtn" id="schBtn">原理图库 <span id="schTopCount">0 页</span></button>
+    <button type="button" class="tbtn sync" id="syncBtn" title="板子、原理图和进度的存储状态"><span class="sync-dot"></span><span id="syncLabel">本地保存</span></button>
+    <button type="button" class="tbtn theme" id="themeBtn" title="配色：跟随系统 / 浅色 / 深色">◐ 跟随系统</button>
   </div>
   <div class="tabs" role="tablist" id="tabs" hidden></div>
-  <button type="button" class="tbtn theme" id="themeBtn" title="配色：跟随系统 / 浅色 / 深色">◐ 跟随系统</button>
 </div>
 
 <section class="empty" id="empty">
@@ -252,7 +353,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <table class="fmt">
       <tr><th>KiCad</th><td><code>.kicad_pcb</code>（6 ~ 10）</td></tr>
       <tr><th>嘉立创EDA 专业版</th><td>工程 <code>.epro</code> / <code>.epro2</code> / 备份 <code>.epru</code>；或 Gerber 包（带飞针文件）</td></tr>
-      <tr><th>Altium Designer</th><td><code>.PcbDoc</code>；或 IPC-2581 / ODB++ / Gerber + Pick Place</td></tr>
+      <tr><th>Altium Designer</th><td><code>.PcbDoc</code>；<code>.SchDoc</code> 在“原理图库”查看；或 IPC-2581 / ODB++ / Gerber + Pick Place</td></tr>
       <tr><th>Cadence Allegro / OrCAD</th><td>导出的 IPC-2581（File → Export → IPC 2581）；或 Gerber(.art) + 坐标 + IPC-356。<code>.brd</code> 原文件是加密格式，读不了</td></tr>
       <tr><th>PADS / 其他</th><td>IPC-2581、ODB++，或 Gerber + 坐标文件</td></tr>
     </table>
@@ -337,8 +438,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
         <button type="button" class="tbtn" id="hideDone" aria-pressed="false" title="列表里不显示已经焊完的种类">隐藏已焊完</button>
         <button type="button" class="tbtn" id="copyBom">复制分步 BOM</button>
         <button type="button" class="tbtn" id="resetProg">清空进度</button>
-        <button type="button" class="tbtn" id="rmBoard">移除这块板</button>
-        <button type="button" class="tbtn" id="rmAll">清空全部板子</button>
+        <button type="button" class="tbtn" id="manageCurrent">管理板子</button>
       </div>
     </div>
     <div class="card" id="card" hidden></div>
@@ -357,15 +457,101 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
     <div class="foot">
       <p>快捷键：<kbd>N</kbd> 下一种　<kbd>[</kbd> 上一种　<kbd>空格</kbd> 焊完这种　<kbd>U</kbd> / <kbd>Ctrl+Z</kbd> 撤销　<kbd>T</kbd> 焊接/测引脚　<kbd>F</kbd> 翻面　<kbd>D</kbd> 双面对照　<kbd>R</kbd> 旋转　<kbd>0</kbd> 全板　<kbd>Esc</kbd> 清除</p>
       <p>极性按常见封装库惯例（KiCad、立创、Altium）判断：二极管、LED 的 1 号焊盘是阴极，电解/钽电容、电池的 1 号焊盘是正极。少数厂家封装不同，焊之前对一下丝印。</p>
-      <p>所有文件只在这台设备的浏览器里解析和保存，不上传任何服务器。</p>
+      <p>原始文件只在浏览器里解析。未登录时板子和进度仅保存在本机；开启云同步后，解析结果通过 HTTPS 保存到你配置的云数据库。</p>
     </div>
   </aside>
 </div>
+
+<dialog id="boardsDialog" aria-labelledby="boardsTitle">
+  <div class="dialog-head"><h2 id="boardsTitle">板子管理</h2><button type="button" class="tbtn x" data-close="boardsDialog" aria-label="关闭">×</button></div>
+  <div class="dialog-body">
+    <p>在这里切换或删除板子。登录云同步后，新增、修改和删除会同步到其他设备。</p>
+    <div class="board-list" id="boardList"></div>
+    <div class="row">
+      <button type="button" class="tbtn primary" id="managerAdd">＋ 导入板子</button>
+      <button type="button" class="tbtn danger" id="rmBoard">删除当前板</button>
+      <button type="button" class="tbtn danger" id="rmAll">清空全部板子</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="cloudDialog" aria-labelledby="cloudTitle">
+  <div class="dialog-head"><h2 id="cloudTitle">存储与云同步</h2><button type="button" class="tbtn x" data-close="cloudDialog" aria-label="关闭">×</button></div>
+  <div class="dialog-body">
+    <div class="cloud-status" id="cloudStatus">板子正在本机保存，离线也能使用。</div>
+    <div id="cloudLogin">
+      <div class="auth-grid">
+        <label class="field"><span>邮箱</span><input id="cloudEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+        <button type="button" class="tbtn primary" id="sendCode">发送验证码</button>
+      </div>
+      <div class="auth-grid" id="codeRow" hidden>
+        <label class="field"><span>邮件中的 6 位验证码</span><input id="cloudCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="123456"></label>
+        <button type="button" class="tbtn primary" id="cloudSignIn">登录并同步</button>
+      </div>
+    </div>
+    <div id="cloudSigned" hidden>
+      <p>当前账号：<b id="cloudAccount"></b></p>
+      <div class="row">
+        <button type="button" class="tbtn primary" id="syncNow">立即同步</button>
+        <button type="button" class="tbtn" id="cloudSignOut">退出登录</button>
+      </div>
+    </div>
+    <details id="cloudConfig">
+      <summary>云服务设置（Supabase）</summary>
+      <p>静态网页本身没有服务器。部署者需先按项目 README 创建免费的 Supabase 数据表，再填写下面两项；其他设备使用相同配置和账号即可看到相同板子和原理图。</p>
+      <label class="field"><span>Project URL</span><input id="cloudUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off"></label>
+      <label class="field"><span>Anon public key（不是 service_role key）</span><input id="cloudKey" type="password" autocomplete="off"></label>
+      <div class="row"><button type="button" class="tbtn" id="saveCloud">保存设置</button></div>
+    </details>
+    <p class="hint">原始 PCB / SchDoc / Gerber / 压缩包不会上传；仅同步解析后的板图、原理图、器件、焊接进度和删除记录。请只同步你有权存储的数据。</p>
+  </div>
+</dialog>
+
+<dialog id="schDialog" class="sch-dialog" aria-labelledby="schLibraryTitle">
+  <div class="dialog-head"><h2 id="schLibraryTitle">AD 原理图库</h2><button type="button" class="tbtn x" data-close="schDialog" aria-label="关闭">×</button></div>
+  <div class="sch-layout">
+    <aside class="sch-sidebar">
+      <button type="button" class="tbtn primary" id="schAdd">＋ 导入原理图</button>
+      <h3>图纸 <span id="schCount">0 页</span></h3>
+      <div class="sch-library-list" id="schLibraryList"></div>
+      <p class="sch-file">支持 Altium Designer 二进制 / ASCII .SchDoc，也可以直接选择 zip / rar 工程包。图纸在本地解析，仅同步解析结果。</p>
+    </aside>
+    <section class="sch-main">
+      <div class="sch-tools">
+        <div class="search"><input id="schSearch" type="search" placeholder="搜索器件、参数或网络" autocomplete="off"><button type="button" class="tbtn" id="schClear" aria-label="清除搜索">×</button></div>
+        <button type="button" class="tbtn" id="schZoomOut" aria-label="缩小">－</button>
+        <button type="button" class="tbtn" id="schZoomIn" aria-label="放大">＋</button>
+        <button type="button" class="tbtn" id="schContentBtn">内容</button>
+        <button type="button" class="tbtn" id="schFit">全页</button>
+        <button type="button" class="tbtn" id="schLabels" aria-pressed="true">文字</button>
+        <button type="button" class="tbtn" id="schGridBtn" aria-pressed="true">网格</button>
+        <button type="button" class="tbtn primary" id="schExportLib">导出 SchLib</button>
+        <button type="button" class="tbtn" id="schExportDoc" title="下载本机保存的原始 AD 二进制图纸；其他设备需重新导入原件">原始 SchDoc</button>
+      </div>
+      <div id="schSheetTools" class="sch-tools" hidden><b id="schTitle"></b><span class="hint" id="schMeta"></span></div>
+      <div id="schSearchResults" class="sch-search-results"></div>
+      <div class="sch-drawing-layout">
+        <div class="sch-canvas">
+          <svg id="schSvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AD 原理图"></svg>
+          <div class="sch-empty" id="schEmpty"><h3>把原理图放进你的图纸库</h3><p>点左侧“导入原理图”，或将 .SchDoc / 工程压缩包拖到网页。可缩放、搜索器件和网络、点击查看详情。</p></div>
+        </div>
+        <aside class="sch-inspector" id="schInspector"><p>点击图中的器件或导线查看详情。也可以搜索位号、参数或网络名称。</p></aside>
+      </div>
+    </section>
+  </div>
+</dialog>
 
 <div class="dropmask" id="dropmask" hidden>松开鼠标，读入文件</div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
+// ===== core/dom.js =====
+// Shared DOM and SVG helpers, loaded before either viewer.
+const NS = "http://www.w3.org/2000/svg";
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
 // ===== core/geom.js =====
 // Shared geometry helpers. Board model units: millimetres, SVG orientation (y grows downward).
 globalThis.Geom = (() => {
@@ -2459,16 +2645,20 @@ globalThis.ImpAltium = (() => {
   }
 
   // ---------- record readers ----------
-  const latin = new TextDecoder("windows-1252");
+  const latin = new TextDecoder("windows-1252"), legacy = new TextDecoder("gb18030");
   function propsRecords(u8) {
     const out = [], dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); let p = 0;
     while (p + 4 <= u8.length) {
       let len = dv.getUint32(p, true); p += 4; len &= 0x00ffffff; if (p + len > u8.length) break;
       const raw = u8.subarray(p, p + len); p += len;
-      let s = latin.decode(raw).replace(/\0+$/, "");
-      const o = {};
-      for (const kv of s.split("|")) { const i = kv.indexOf("="); if (i > 0) o[kv.slice(0, i).trim().toUpperCase()] = kv.slice(i + 1); }
-      for (const k of Object.keys(o)) if (k.startsWith("%UTF8%")) { try { o[k.slice(6)] = new TextDecoder().decode(Uint8Array.from(o[k], c => c.charCodeAt(0) & 255)); } catch (e) {} }
+      const s = Array.from(raw, b => String.fromCharCode(b)).join("").replace(/\0+$/, ""), o = {}, bytes = {};
+      for (const kv of s.split("|")) {
+        const i = kv.indexOf("="); if (i <= 0) continue;
+        const k = kv.slice(0, i).trim().toUpperCase(), value = kv.slice(i + 1);
+        bytes[k] = Uint8Array.from(value, c => c.charCodeAt(0) & 255);
+        if (k.startsWith("%UTF8%")) o[k.slice(6)] = new TextDecoder().decode(bytes[k]);
+        else if (!(("%UTF8%" + k) in bytes)) o[k] = /[^\x00-\x7f]/.test(value) ? legacy.decode(bytes[k]) : value;
+      }
       out.push(o);
     }
     return out;
@@ -2681,6 +2871,710 @@ globalThis.ImpAltium = (() => {
   return { parse, cfb, propsRecords };
 })();
 
+// ===== import/altium_sch.js =====
+// Altium Designer .SchDoc: embedded symbols, text, wires and connectivity.
+globalThis.ImpAltiumSch = (() => {
+  const U = 0.254, f = n => Math.round(n * 10000) / 10000;
+  const hidden = r => r.ISHIDDEN === "T";
+  const color = n => { const v = +(n || 0) & 0xffffff; return "#" + [v & 255, v >> 8 & 255, v >> 16 & 255].map(x => x.toString(16).padStart(2, "0")).join(""); };
+  const width = n => [0.12, 0.254, 0.508, 1.016][+n || 0] || 0.12;
+  function coord(r, k) { return f((+(r[k] || 0) + +(r[k + "_FRAC"] || 0) / 100000) * U); }
+  function point(r, x = "LOCATION.X", y = "LOCATION.Y") { return [coord(r, x), -coord(r, y)]; }
+  function points(r, x = "X", y = "Y") {
+    const out = [];
+    for (let i = 1, n = Math.min(10000, +(r.LOCATIONCOUNT || 0)); i <= n; i++) out.push([coord(r, x + i), -coord(r, y + i)]);
+    return out;
+  }
+  const path = (p, close) => p.length ? "M" + p.map(q => q.map(f).join(" ")).join("L") + (close ? "Z" : "") : "";
+  const text = (x, y, value, size, rot, anchor, c, owner = -1) => ({ x: f(x), y: f(y), text: value, size: f(size), rot, anchor, color: c, owner });
+  function orientText(p, value, font, c, owner = -1) {
+    const o = +(p.ORIENTATION || 0);
+    return text(p[0], p[1], value, font.size * 0.92, o === 1 || o === 3 ? -90 : 0, o >= 2 ? "end" : "start", c || p.COLOR, owner);
+  }
+  function arc(r) {
+    const [cx, cy] = point(r), rx = coord(r, "RADIUS"), ry = coord(r, "SECONDARYRADIUS") || rx;
+    const a = +(r.STARTANGLE || 0), b = +(r.ENDANGLE || 0);
+    let span = ((b - a) % 360 + 360) % 360; if (!span) span = 360;
+    const n = Math.max(2, Math.ceil(span / 3)), pts = [];
+    for (let i = 0; i <= n; i++) { const t = (a + span * i / n) * Math.PI / 180; pts.push([cx + rx * Math.cos(t), cy - ry * Math.sin(t)]); }
+    return path(pts);
+  }
+  function rect(r, radius) {
+    const a = point(r), b = point(r, "CORNER.X", "CORNER.Y");
+    const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(a[0] - b[0]), h = Math.abs(a[1] - b[1]);
+    if (!radius) return path([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], true);
+    return path(Geom.rrect(w, h, Math.min(coord(r, "CORNERXRADIUS"), w / 2, h / 2)).map(p => [p[0] + x + w / 2, p[1] + y + h / 2]), true);
+  }
+  function unionFind(n) {
+    const p = Array.from({ length: n }, (_, i) => i);
+    const find = x => { while (p[x] !== x) { p[x] = p[p[x]]; x = p[x]; } return x; };
+    return { find, join(a, b) { a = find(a); b = find(b); if (a !== b) p[b] = a; } };
+  }
+  function connectivity(doc) {
+    const { wires, pins, junctions, ports } = doc;
+    const total = wires.length + pins.length + junctions.length + ports.length, uf = unionFind(total);
+    const p0 = wires.length, j0 = p0 + pins.length, c0 = j0 + junctions.length;
+    const at = new Map(), eps = 0.012;
+    const key = p => p.map(x => Math.round(x / eps)).join(",");
+    const addPoint = (p, i) => { const k = key(p); if (at.has(k)) uf.join(at.get(k), i); else at.set(k, i); };
+    const onSeg = (p, a, b) => Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) < eps && p[0] >= Math.min(a[0], b[0]) - eps && p[0] <= Math.max(a[0], b[0]) + eps && p[1] >= Math.min(a[1], b[1]) - eps && p[1] <= Math.max(a[1], b[1]) + eps;
+    wires.forEach((w, i) => { w.points.forEach(p => addPoint(p, i)); });
+    const joinOnWire = (p, id) => { for (let i = 0; i < wires.length; i++) { const q = wires[i].points; for (let j = 1; j < q.length; j++) if (onSeg(p, q[j - 1], q[j])) { uf.join(id, i); break; } } };
+    pins.forEach((p, i) => { addPoint([p.ex, p.ey], p0 + i); joinOnWire([p.ex, p.ey], p0 + i); });
+    junctions.forEach((p, i) => { addPoint(p, j0 + i); joinOnWire(p, j0 + i); });
+    const byName = new Map();
+    ports.forEach((p, i) => {
+      addPoint([p.x, p.y], c0 + i); joinOnWire([p.x, p.y], c0 + i);
+      const k = (p.name || "").toUpperCase(); if (!k) return;
+      if (byName.has(k)) uf.join(byName.get(k), c0 + i); else byName.set(k, c0 + i);
+    });
+    const groups = new Map();
+    for (let i = 0; i < total; i++) { const root = uf.find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(i); }
+    doc.nets = [];
+    for (const ids of groups.values()) {
+      const net = { name: "", wires: [], pins: [], ports: [], points: [] };
+      for (const i of ids) {
+        if (i < p0) { net.wires.push(i); wires[i].net = doc.nets.length; net.points.push(...wires[i].points); }
+        else if (i < j0) { net.pins.push(i - p0); net.points.push([pins[i - p0].ex, pins[i - p0].ey]); }
+        else if (i < c0) net.points.push(junctions[i - j0]);
+        else { const p = ports[i - c0]; net.ports.push(i - c0); net.name ||= p.name; net.points.push([p.x, p.y]); }
+      }
+      if (!net.wires.length && net.pins.length < 2 && !net.ports.length) continue;
+      for (const i of net.pins) { pins[i].net = net.name; pins[i].netIndex = doc.nets.length; }
+      for (const i of net.ports) ports[i].netIndex = doc.nets.length;
+      if (net.wires.length || net.pins.length) doc.nets.push(net);
+    }
+  }
+  function records(u8) {
+    if (u8[0] === 0xd0 && u8[1] === 0xcf) {
+      const files = ImpAltium.cfb(u8), key = Object.keys(files).find(k => k.toLowerCase() === "fileheader");
+      if (!key) throw new Error("没有找到 SchDoc 的 FileHeader 数据流");
+      return ImpAltium.propsRecords(files[key]());
+    }
+    const text = Files.decodeText(u8);
+    if (!/\|RECORD=31\|/i.test(text)) throw new Error("不是 Altium 二进制或 ASCII SchDoc");
+    return text.split(/\r?\n/).filter(l => /^\s*\|/.test(l)).map(l => {
+      const b = new TextEncoder().encode(l), record = new Uint8Array(b.length + 4);
+      new DataView(record.buffer).setUint32(0, b.length, true); record.set(b, 4);
+      return ImpAltium.propsRecords(record)[0];
+    }).filter(Boolean);
+  }
+  function parse(u8, fileName) {
+    const rs = records(u8);
+    if (!/Schematic Capture/i.test(rs[0]?.HEADER || "")) throw new Error("不是 Altium SchDoc 原理图");
+    const objects = rs.slice(1), sheet = objects.find(r => +r.RECORD === 31);
+    if (!sheet) throw new Error("SchDoc 里没有图纸记录，可能是 SchLib 符号库");
+    const ownerOf = i => { const r = objects[i]; return r && +r.RECORD !== 1 && +r.OWNERINDEX > 0 && +r.OWNERINDEX < i ? +r.OWNERINDEX : -1; };
+    const comps = new Map(), shapes = [], texts = [], pins = [], wires = [], junctions = [], ports = [];
+    const fonts = {};
+    for (let i = 1; i <= +(sheet.FONTIDCOUNT || 1); i++) fonts[i] = { name: sheet["FONTNAME" + i] || "Times New Roman", size: +sheet["SIZE" + i] * U || 2.54 };
+    const doc = { kind: "schematic", ver: 2, source: "Altium Designer SchDoc", file: fileName, title: "", width: 0, height: 0, shapes, texts, pins, wires, junctions, ports, components: [], nets: [], unsupported: [] };
+    const sizes = [[1150, 760], [1550, 1110], [2230, 1570], [3150, 2230], [4460, 3150], [950, 750], [1500, 950], [2000, 1500], [3200, 2000], [4200, 3200], [1100, 850], [1400, 850], [1700, 1100], [990, 790], [1540, 990], [2060, 1560], [3260, 2060], [4280, 3280]];
+    let sz = sheet.USECUSTOMSHEET === "T" ? [+sheet.CUSTOMX || 1150, +sheet.CUSTOMY || 760] : sizes[+sheet.SHEETSTYLE || 0];
+    if (+sheet.WORKSPACEORIENTATION === 1) sz = [sz[1], sz[0]];
+    doc.width = sz[0] * U; doc.height = sz[1] * U;
+    const componentOwner = i => { let o = ownerOf(i); for (let n = 0; o >= 0 && n < 20 && +objects[o]?.RECORD !== 1; n++) o = ownerOf(o); return o; };
+    for (let i = 0; i < objects.length; i++) {
+      const r = objects[i], type = +r.RECORD, owner = type === 45 ? componentOwner(i) : ownerOf(i), ci = comps.get(owner)?.index ?? -1;
+      if (type === 1) {
+        const c = { index: doc.components.length, ref: "", value: "", description: r.COMPONENTDESCRIPTION || "", library: r.LIBREFERENCE || r.DESIGNITEMID || "", footprint: "", origin: point(r), part: +(r.CURRENTPARTID || 1), partCount: +(r.PARTCOUNT || 2), properties: {}, pins: [], bb: null };
+        comps.set(i, { ...c, part: +(r.CURRENTPARTID || 1), display: +(r.DISPLAYMODE || 0) }); doc.components.push(c); continue;
+      }
+      const parent = comps.get(owner);
+      if (parent && ci >= 0 && ((+r.OWNERPARTID > 0 && +r.OWNERPARTID !== parent.part) || +(r.OWNERPARTDISPLAYMODE || 0) !== parent.display)) continue;
+      const c = +(r.COLOR || 0), fill = r.ISSOLID === "T" && r.TRANSPARENT !== "T" ? color(r.AREACOLOR) : "";
+      if (type === 45 && parent && r.MODELTYPE === "PCBLIB" && (r.ISCURRENT === "T" || !doc.components[ci].footprint)) doc.components[ci].footprint = r.MODELNAME || "";
+      if (type === 41) {
+        if (r.TEXT && r.NAME === "Title" && owner <= 0) doc.title = r.TEXT;
+        if (parent && r.TEXT) {
+          const comp = doc.components[ci]; comp.properties[r.NAME || "参数"] = r.TEXT;
+          if (r.NAME === "Comment") comp.value = r.TEXT;
+          if (r.NAME === "SourceDesignator" && !comp.ref) comp.ref = r.TEXT;
+        }
+      }
+      if (hidden(r)) continue;
+      if (type === 6 || type === 7 || type === 26 || type === 27 || type === 37 || type === 218) {
+        const pts = type === 37 ? [point(r), point(r, "CORNER.X", "CORNER.Y")] : points(r);
+        if (type === 27) wires.push({ points: pts, color: color(c), net: -1 });
+        else shapes.push([path(pts, type === 7), color(c), fill, width(r.LINEWIDTH), ci]);
+      } else if ([5, 8, 9, 10, 11, 12, 13, 14, 15].includes(type)) {
+        let d = "";
+        if (type === 5) { const p = points(r); d = p.length === 4 ? `M${p[0].join(" ")}C${p.slice(1).map(q => q.join(" ")).join(" ")}` : path(p); }
+        else if (type === 13) d = path([point(r), point(r, "CORNER.X", "CORNER.Y")]);
+        else if (type === 8) { const p = point(r), rx = coord(r, "RADIUS"), ry = coord(r, "SECONDARYRADIUS") || rx; d = `M${f(p[0] - rx)} ${f(p[1])}a${rx} ${ry} 0 1 0 ${f(rx * 2)} 0a${rx} ${ry} 0 1 0 ${f(-rx * 2)} 0Z`; }
+        else if (type === 10 || type === 14 || type === 15) d = type === 15 ? (() => { const p = point(r), w = coord(r, "XSIZE"), h = coord(r, "YSIZE"); return path([[p[0], p[1]], [p[0] + w, p[1]], [p[0] + w, p[1] + h], [p[0], p[1] + h]], true); })() : rect(r, type === 10);
+        else d = arc(r);
+        shapes.push([d, color(c), fill, width(r.LINEWIDTH), ci]);
+      } else if (type === 2 && parent) {
+        const p = point(r), o = +(r.PINCONGLOMERATE || 0) & 3, len = coord(r, "PINLENGTH");
+        const end = [p[0] + (o === 0 ? len : o === 2 ? -len : 0), p[1] + (o === 1 ? -len : o === 3 ? len : 0)];
+        const pin = { index: pins.length, owner: ci, number: r.DESIGNATOR || "", name: r.NAME || "", description: r.DESCRIPTION || "", electrical: +(r.ELECTRICAL ?? 4), flags: +(r.PINCONGLOMERATE || 0), color: +(r.COLOR || 0), symbols: [r.SYMBOL_INNEREDGE, r.SYMBOL_OUTEREDGE, r.SYMBOL_INNER, r.SYMBOL_OUTER].map(v => +(v || 0)), x: p[0], y: p[1], ex: end[0], ey: end[1], net: "" };
+        pins.push(pin); doc.components[ci].pins.push(pin.index);
+        const font = fonts[+(r.FONTID || sheet.SYSTEMFONT || 1)] || fonts[1];
+        if (+r.PINCONGLOMERATE & 16 && pin.number) texts.push(text(end[0] + (o === 0 ? 0.8 : o === 2 ? -0.8 : 1.8), end[1] + (o === 1 ? 0.8 : o === 3 ? -0.8 : 0), pin.number, font.size * 0.78, o === 1 || o === 3 ? -90 : 0, o === 2 ? "end" : "start", c, ci));
+        if (+r.PINCONGLOMERATE & 8 && pin.name) texts.push(text(end[0] + (o === 0 ? -2 : o === 2 ? 2 : 0), end[1] + (o === 1 ? -2 : o === 3 ? 2 : 0), pin.name, font.size * 0.82, o === 1 || o === 3 ? -90 : 0, o === 0 ? "end" : "start", c, ci));
+      } else if ([4, 25, 32, 33, 34, 41, 43, 226].includes(type) && r.TEXT) {
+        const font = fonts[+(r.FONTID || sheet.SYSTEMFONT || 1)] || fonts[1];
+        const t = orientText(point(r), r.SHOWNAME === "T" && r.NAME ? r.NAME + " = " + r.TEXT : r.TEXT, font, c, ci); texts.push(t);
+        if (type === 34 && parent) doc.components[ci].ref = r.TEXT;
+        if (type === 25) ports.push({ name: r.TEXT, x: t.x, y: t.y, type, orientation: +(r.ORIENTATION || 0), color: color(c), netIndex: -1 });
+      } else if ((type === 17 || type === 18) && (r.TEXT || r.NAME)) {
+        const p = point(r); ports.push({ name: r.TEXT || r.NAME, x: p[0], y: p[1], type, style: +(r.STYLE || 0), orientation: +(r.ORIENTATION || 0), color: color(c), netIndex: -1 });
+        if (type === 17 && r.SHOWNETNAME !== "F" || type === 18) texts.push(text(p[0] + 3, p[1] - 2, r.TEXT || r.NAME, (fonts[+(r.FONTID || 2)] || fonts[1]).size, 0, "start", c));
+      } else if (type === 29) junctions.push(point(r));
+      else if (type === 22) { const p = point(r); shapes.push([path([[p[0] - 2, p[1] - 2], [p[0] + 2, p[1] + 2]]) + path([[p[0] - 2, p[1] + 2], [p[0] + 2, p[1] - 2]]), color(255), "", 0.3, ci]); }
+      else if (type === 28 && r.TEXT) {
+        const p = point(r), font = fonts[+(r.FONTID || 1)] || fonts[1];
+        r.TEXT.split("~1").forEach((s, j) => texts.push(text(p[0], p[1] + j * font.size, s, font.size, 0, "start", c, ci)));
+        if (r.SHOWBORDER === "T" || fill) shapes.push([rect(r), color(c), fill, width(r.LINEWIDTH), ci]);
+      } else if (type === 30) doc.unsupported.push("嵌入图片");
+    }
+    const bb = {};
+    const grow = (i, p) => { if (i < 0) return; (bb[i] ||= [Infinity, Infinity, -Infinity, -Infinity]); Geom.bboxOf([p], bb[i]); };
+    for (const [d, , , , i] of shapes) { const nums = d.match(/-?\d+(?:\.\d+)?/g) || []; for (let j = 0; j + 1 < nums.length; j += 2) grow(i, [+nums[j], +nums[j + 1]]); }
+    for (const p of pins) { grow(p.owner, [p.x, p.y]); grow(p.owner, [p.ex, p.ey]); }
+    for (const c of doc.components) { c.ref ||= c.library.replace(/^[^_]*_/, "") || `器件 ${c.index + 1}`; c.value ||= c.description.replace(/^.*?:\s*/, ""); c.bb = bb[c.index] || [0, 0, 10, 10]; }
+    connectivity(doc);
+    doc.title ||= fileName.replace(/\.[^.]+$/, "");
+    if (doc.unsupported.length) doc.unsupported = [...new Set(doc.unsupported)];
+    return doc;
+  }
+  return { parse };
+})();
+
+// ===== import/allegro.js =====
+// Cadence Allegro binary .brd importer (database formats 16.0 – 19.0, file magic 0x0013xxxx – 0x0016xxxx).
+// Block layouts and version-dependent fields follow the format notes of KiCad's Allegro importer
+// (pcbnew/pcb_io/allegro, FORMAT.md); this is an independent implementation, no code copied.
+globalThis.ImpAllegro = (() => {
+  const G = Geom;
+  // file magic (lowest byte masked) → database format, numbered like KiCad's FMT_VER so conditions read "v >= 172"
+  const FORMATS = { 0x00130000: 160, 0x00130200: 161, 0x00130400: 162, 0x00130500: 162, 0x00130C00: 164, 0x00131000: 165, 0x00131500: 166,
+    0x00140400: 172, 0x00140500: 172, 0x00140600: 172, 0x00140700: 172, 0x00140900: 174, 0x00140E00: 174, 0x00141500: 175, 0x00150000: 180, 0x00150200: 181, 0x00160100: 190 };
+  const TESTED = new Set([166, 174, 181, 190]); // formats checked against real boards; the others are parsed from the documented layouts
+  const fmtName = v => `${Math.floor(v / 10)}.${v % 10}`;
+  const hex = n => "0x" + (n >>> 0).toString(16).padStart(8, "0");
+  const FALLBACK = "请在 Allegro 里导出 IPC-2581（File → Export → IPC 2581）再拖进来";
+
+  // is this an Allegro database? → { ok, v, name } when readable, { ok: false, why } for Allegro versions we can't read, null otherwise
+  function sniff(u8) {
+    if (!u8 || u8.length < 0x400) return null;
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), magic = dv.getUint32(0, true), v = FORMATS[(magic & 0xFFFFFF00) >>> 0];
+    if (v) return { ok: true, v, name: fmtName(v), magic };
+    if (dv.getUint32(4, true) !== 3 || dv.getUint32(12, true) !== 3 || dv.getUint32(8, true) > 2) return null;
+    const major = magic >>> 16, top = magic >>> 24;
+    if (major <= 0x12 || (top >= 0x0F && top <= 0x12 && !(magic & 0x00FF0000)))
+      return { ok: false, magic, why: `这是 Allegro 16.0 之前的老版本 .brd（文件标识 ${hex(magic)}），格式不同，读不了。请用 Allegro 16 以上版本打开另存，或${FALLBACK.slice(1)}` };
+    return { ok: false, magic, why: `未知的 Allegro 数据库版本（文件标识 ${hex(magic)}，可能比本工具认识的 19.0 格式更新），读不了。${FALLBACK}` };
+  }
+
+  // ---------- binary reader ----------
+  const utf8 = new TextDecoder("utf-8", { fatal: true }), gbk = new TextDecoder("gb18030");
+  const decode = b => { try { return utf8.decode(b); } catch (e) { return gbk.decode(b); } };
+  class Rd {
+    constructor(u8, p = 0) { this.u8 = u8; this.dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); this.p = p; this.d8 = new DataView(new ArrayBuffer(8)); }
+    b() { if (this.p >= this.u8.length) throw new RangeError("文件提前结束"); return this.u8[this.p++]; }
+    h() { const v = this.dv.getUint16(this.p, true); this.p += 2; return v; }
+    w() { const v = this.dv.getUint32(this.p, true); this.p += 4; return v; }
+    i() { const v = this.dv.getInt32(this.p, true); this.p += 4; return v; }
+    f() { this.d8.setUint32(0, this.w()); this.d8.setUint32(4, this.w()); return this.d8.getFloat64(0); } // double kept as two LE words, high word first
+    sk(n) { if (n < 0 || this.p + n > this.u8.length) throw new RangeError("块长度越界"); this.p += n; return 0; }
+    ws(n) { const a = []; for (let k = 0; k < n; k++) a.push(this.w()); return a; }
+    is(n) { const a = []; for (let k = 0; k < n; k++) a.push(this.i()); return a; }
+    ly() { return [this.b(), this.b()]; } // [class, subclass]
+    str(n) { const s = this.p, e0 = s + n; if (e0 > this.u8.length) throw new RangeError("字符串越界"); let e = s; while (e < e0 && this.u8[e]) e++; this.p = (e0 + 3) & ~3; return decode(this.u8.subarray(s, e)); } // fixed field, padded to 4 bytes
+  }
+
+  // ---------- file header ----------
+  const LISTS = ["x04", "x06", "x0C", "shapes", "x14", "nets", "x1C", "x24_28", "u1", "x2B", "x03_30", "x0A", "x1D", "u2", "x38", "x2C", "x0C_2", "u3", "x35", "x36", "u4", "u5", "x0A_2"];
+  function header(r, v) {
+    const H = { magic: r.w() }; r.sk(16); H.objects = r.w(); r.sk(8);
+    if (v < 180) r.sk(28); else { r.sk(8); H.x27 = r.w(); r.sk(8); H.nStr = r.w(); r.sk(4 + 36); } // V18 moved the 0x27 end and string count up here
+    H.ll = {}; for (const n of v >= 180 ? [...LISTS, "x03_2"] : LISTS) H.ll[n] = { tail: r.w(), head: r.w() };
+    r.sk(v >= 181 ? 36 : 4);
+    H.verStr = r.str(60); r.sk(8); r.sk(v < 180 ? 68 : 36);
+    H.units = r.b(); r.sk(7);
+    if (v < 180) { r.sk(4); H.x27 = r.w(); }
+    r.sk(4); if (v < 180) H.nStr = r.w();
+    r.sk(212); H.div = r.w(); r.sk(4 * (v >= 181 ? 102 : 110));
+    H.layerMap = []; for (let k = 0; k < 25; k++) H.layerMap.push([r.w(), r.w()]);
+    return H;
+  }
+
+  // ---------- object blocks: one reader per type, fields in file order, "v >= 172 && …" marks version-dependent fields ----------
+  // A block is [type byte][3 bytes][fields…]; the type byte is consumed before these run. Fields named _x are read only to skip them.
+  const font = r => r.sk(4);
+  const BLK = {
+    0x01: (r, v) => ({ _a: r.sk(1), _b: r.b(), sub: r.b(), key: r.w(), next: r.w(), _c: r.sk(8), _d: v >= 172 && r.sk(4), width: r.w(), x0: r.i(), y0: r.i(), x1: r.i(), y1: r.i(), cx: r.f(), cy: r.f(), rad: r.f(), bb: r.is(4) }), // arc
+    0x03: (r, v) => { // property field
+      const o = { _a: r.sk(1), code: r.h(), key: r.w(), next: r.w(), _b: v >= 172 && r.sk(4), sub: r.b(), _c: r.b(), size: r.h(), _d: v >= 172 && r.sk(4) }, s = o.sub;
+      if (s === 0x65) {} else if (s === 0x64 || s === 0x66 || s === 0x67 || s === 0x6A) o.val = r.w(); else if (s === 0x69) o.val = r.ws(2);
+      else if ([0x68, 0x6B, 0x6D, 0x6E, 0x6F, 0x71, 0x73, 0x78].includes(s)) o.val = r.str(o.size);
+      else if (s === 0x6C) { const n = r.w(); if (n > 1e6) throw new Error("0x03/6C 计数异常"); r.sk(4 * n); }
+      else if (s === 0x70 || s === 0x74) { const a = r.h(), b = r.h(); r.sk(b + 4 * a); }
+      else if (s === 0xF6) r.sk(80);
+      else if (o.size === 4 || o.size === 8) r.sk(o.size);
+      else throw new Error(`未知的 0x03 子类型 0x${s.toString(16)}`);
+      return o; },
+    0x04: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), net: r.w(), conn: r.w(), _b: v >= 174 && r.sk(4) }), // net assignment
+    0x05: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), na: r.w(), _b: r.sk(32), _c: v >= 172 && r.sk(8), seg: r.w(), _d: r.sk(8) }), // track
+    0x06: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), dev: r.w(), sym: r.w(), inst: r.w(), _b: r.sk(8), fields: r.w(), _c: v >= 172 && r.sk(4) }), // component (device)
+    0x07: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: v >= 172 && r.sk(12), fpInst: r.w(), _c: v < 172 && r.sk(4), ref: r.w(), _d: r.sk(12), pad: r.w() }), // component instance
+    0x08: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: v >= 172 && r.sk(4), _c: v < 172 && r.sk(4), next: r.w(), _d: v >= 172 && r.sk(4), pinName: r.w(), _e: v >= 172 && r.sk(4), _f: r.sk(4) }), // pin number
+    0x09: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: r.sk(16), _c: v >= 172 && r.sk(4), _d: r.sk(20), _e: v >= 174 && r.sk(4) }),
+    0x0A: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), _d: r.sk(52), _e: v >= 174 && r.sk(4) }), // DRC marker
+    0x0C: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(8), _c: r.sk(v < 172 ? 4 : 12), _d: r.sk(4), _e: v >= 180 && r.sk(4), _f: r.sk(28), _g: v >= 174 && v < 180 && r.sk(4) }), // pin definition
+    0x0D: (r, v) => ({ _a: r.sk(3), key: r.w(), name: r.w(), next: r.w(), _b: v >= 174 && r.sk(4), x: r.i(), y: r.i(), ps: r.w(), _c: r.sk(4), _d: v >= 172 && r.sk(4), _e: r.sk(4), rot: r.w() }), // pad in footprint-local space
+    0x0E: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: r.sk(16), _c: v >= 172 && r.sk(8), c: r.is(4), _d: r.sk(12), rot: r.w() }), // rectangle
+    0x0F: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: r.sk(4), _c: v >= 174 && r.sk(4), _d: r.sk(v < 190 ? 32 : 4), next: v >= 172 ? r.w() : 0, _e: r.sk(12) }), // function slot (19.0: name moved to a string pointer)
+    0x10: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: v >= 172 && r.sk(4), _c: r.sk(4), _d: v >= 174 && r.sk(4), _e: r.sk(20) }), // function instance
+    0x11: (r, v) => ({ _a: r.sk(3), key: r.w(), name: r.w(), next: r.w(), _b: r.sk(8), _c: v >= 174 && r.sk(4) }), // pin name
+    0x12: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: r.sk(16), _c: v >= 165 && r.sk(4), _d: v >= 174 && r.sk(4) }),
+    0x14: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: r.sk(8), _c: v >= 172 && r.sk(4), seg: r.w(), _d: r.sk(8) }), // graphics container
+    0x15: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(8), _c: v >= 172 && r.sk(4), width: r.w(), x0: r.i(), y0: r.i(), x1: r.i(), y1: r.i() }), // line segment (also 0x16, 0x17)
+    0x1A: r => ({ _a: r.sk(3), key: r.w(), _b: r.sk(80) }),
+    0x1B: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), name: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), _d: r.sk(36) }), // net
+    0x1C: (r, v) => { // padstack: header, then fixed technical-layer slots, then [antipad, thermal, pad, (keepout)] per copper layer
+      const o = { _a: r.b(), n: r.b(), start: r.b(), key: r.w(), next: r.w(), name: r.w() };
+      if (v < 172) Object.assign(o, { drill: r.w(), _b: r.sk(20), _c: r.b(), flags: r.b(), _d: r.sk(4), layers: (r.sk(4), r.h()), _e: r.sk(20), slotX: r.w(), slotY: r.w(), _f: r.sk(4), _g: v >= 165 && r.sk(4) });
+      else Object.assign(o, { _b: r.sk(12), _c: r.b(), _d: r.b(), flags: r.b(), _e: r.sk(13), layers: r.h(), _f: r.sk(18), drill: r.w(), _g: r.sk(8), slotX: r.w(), slotY: r.w(), _h: r.sk(24 + 84), _i: v >= 180 && r.sk(32) });
+      if (o.layers > 256) throw new Error("焊盘层数异常");
+      o.fixed = v < 165 ? 10 : v < 172 ? 11 : 21; o.per = v < 172 ? 3 : 4;
+      const n = o.fixed + o.layers * o.per; o.comps = [];
+      for (let k = 0; k < n; k++) {
+        const c = { t: r.b(), _a: r.sk(3), _b: v >= 172 && r.sk(4), w: r.i(), h: r.i(), z1: v >= 172 ? r.i() : 0, ox: r.i(), oy: r.i() };
+        if (v >= 172) { r.sk(4); c.shape = r.w(); } else { c.shape = r.w(); if (k < n - 1) r.sk(4); } // before 17.2 the last slot has no trailing word
+        o.comps.push(c);
+      }
+      r.sk(4 * o.n * (v < 172 ? 8 : 10)); return o; },
+    0x1D: (r, v) => { r.sk(3); const o = { key: r.w(), next: r.w() }; r.sk(8); const a = r.h(), b = r.h(); r.sk(b * (v === 161 ? 48 : 56) + a * 256 + (v >= 172 ? 4 : 0)); return o; }, // constraint set
+    0x1E: (r, v) => { r.sk(3); const o = { key: r.w(), next: r.w() }; if (v >= 161) r.sk(4); r.sk(4); const n = r.w(); r.str(n); if (v >= 172) r.sk(4); return o; }, // SI model
+    0x1F: (r, v) => { r.sk(3); const o = { key: r.w(), next: r.w() }; r.sk(14); const n = r.h(); r.sk(v >= 175 ? n * 384 + 8 : v >= 172 ? n * 280 + 8 : v >= 162 ? n * 280 + 4 : n * 240 + 4); return o; },
+    0x20: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(28), _c: v >= 174 && r.sk(40) }),
+    0x21: r => { r.sk(3); const size = r.w(), key = r.w(); if (size < 12) throw new Error("0x21 块长度异常"); r.sk(size - 12); return { key }; }, // sized blob
+    0x22: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: v >= 172 && r.sk(4), _c: r.sk(32) }),
+    0x23: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(56), _c: v >= 164 && r.sk(16), _d: v >= 174 && r.sk(4) }), // ratsnest line
+    0x24: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: r.sk(8), _c: v >= 172 && r.sk(4), c: r.is(4), _d: r.sk(12), rot: r.w() }), // rectangle
+    0x26: (r, v) => ({ _a: r.sk(3), key: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), _d: r.sk(8), _e: v >= 174 && r.sk(4) }),
+    0x27: (r, v, H) => { if (!(H.x27 - 1 > r.p)) throw new Error("0x27 块结束位置异常"); r.p = H.x27 - 1; return {}; }, // runs up to an offset stored in the header
+    0x28: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: r.sk(8), _c: v >= 172 && r.sk(8), _d: r.sk(12), seg: r.w(), _e: r.sk(8), _f: v >= 172 && r.sk(4), _g: r.sk(4), _h: v < 172 && r.sk(4), c: r.is(4) }), // polygon shape
+    0x29: r => ({ _a: r.sk(3), key: r.w(), _b: r.sk(48) }),
+    0x2A: (r, v) => { r.sk(1); const n = r.h(); if (v >= 174) r.sk(4); const names = []; for (let k = 0; k < n; k++) { if (v < 165) { names.push(r.str(32)); r.sk(4); } else { names.push(r.w()); r.sk(8); } } return { names, key: r.w() }; }, // layer list
+    0x2B: (r, v) => ({ _a: r.sk(3), key: r.w(), name: r.w(), _b: r.sk(20), next: r.w(), inst: r.w(), _c: r.sk(12), fields: r.w(), _d: r.sk(12), _e: v >= 164 && r.sk(4), _f: v >= 172 && r.sk(4) }), // footprint definition
+    0x2C: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: v >= 172 && r.sk(12), _c: r.sk(4), _d: v < 172 && r.sk(4), _e: r.sk(16) }),
+    0x2D: (r, v) => { // placed footprint
+      const o = { _a: r.b(), layer: r.b(), _b: r.b(), key: r.w(), next: r.w(), _c: v >= 172 && r.sk(4), inst16: v < 172 ? r.w() : 0, _d: r.sk(4), _e: v >= 172 && r.sk(4), _f: r.sk(4), rot: r.w(), x: r.i(), y: r.i() };
+      o.inst = v >= 172 ? r.w() : o.inst16; Object.assign(o, { gfx: r.w(), pad: r.w(), text: r.w(), asm: r.w(), areas: r.w(), _g: r.sk(8) }); return o; },
+    0x2E: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(24), _c: v >= 172 && r.sk(4) }),
+    0x2F: r => ({ _a: r.sk(3), key: r.w(), _b: r.sk(24) }),
+    0x30: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: v >= 172 && r.sk(8), _c: v >= 172 && font(r), _d: v >= 172 && r.sk(4), _e: v >= 174 && r.sk(4), sg: r.w(), _f: r.sk(4), _g: v < 172 && font(r), _h: v >= 172 && r.sk(4), x: r.i(), y: r.i(), _i: r.sk(4), rot: r.w(), _j: v < 172 && r.sk(4), _k: v >= 181 && r.sk(4) }), // text
+    0x31: (r, v) => { r.sk(3); const o = { key: r.w() }; r.sk(14); const n = r.h(); if (v >= 174) r.sk(4); o.s = r.str(n); return o; }, // text string
+    0x32: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), net: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), nextInFp: r.w(), _d: r.sk(8), pad: r.w(), _e: r.sk(8), pin: r.w(), _f: r.sk(4), _g: v >= 172 && r.sk(4), _h: r.sk(8), c: r.is(4) }), // placed pad; c = its board bounding box
+    0x33: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), net: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), _d: r.sk(4), _e: v >= 172 && r.sk(4), x: r.i(), y: r.i(), _f: r.sk(4), ps: r.w(), _g: r.sk(32) }), // via
+    0x34: (r, v) => ({ _a: r.sk(1), ly: r.ly(), key: r.w(), next: r.w(), _b: r.sk(4), _c: v >= 172 && r.sk(4), _d: r.sk(4), seg: r.w(), _e: r.sk(8) }), // keepout
+    0x35: r => { r.sk(3); const next = r.w(); r.sk(112); return { next, key: r.w() }; }, // log file names
+    0x36: (r, v) => { // definition tables: fixed-size items, the item kind is in the header
+      r.sk(1); const code = r.h(), o = { key: r.w(), next: r.w() }; if (v >= 172) r.sk(4);
+      const num = r.w(), count = r.w(); r.sk(8); if (v >= 174) r.sk(4);
+      if (num > 1e6 || count > num) throw new Error("0x36 计数异常");
+      const size = { 0x02: 32 + 56 + (v >= 164 ? 12 : 0) + (v >= 172 ? 8 : 0), 0x03: (v >= 172 ? 64 : 32) + (v >= 174 ? 4 : 0), 0x05: 28 + (v >= 175 ? 4 : 0), 0x06: 8 + (v < 172 ? 200 : 0),
+        0x08: 32 + (v >= 174 && v < 190 ? 4 : 0) + (v >= 172 ? 32 : 0), 0x0B: 1016, 0x0C: 232, 0x0D: 200, 0x0F: 20, 0x10: 108 + (v >= 180 ? 4 : 0), 0x12: 1052 }[code];
+      if (size === undefined) throw new Error(`未知的 0x36 表类型 0x${code.toString(16)}`);
+      r.sk(num * size); return o; },
+    0x37: (r, v) => { r.sk(3); const o = { key: r.w() }; r.sk(4); o.next = r.w(); const cap = r.w(), n = r.w(); r.sk(4); if (v >= 174) r.sk(4); if (n > cap) throw new Error("0x37 计数异常"); r.sk(4 * cap); return o; }, // pointer array
+    0x38: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(4), _c: r.sk(v < 166 ? 20 : 8), _d: r.sk(28), _e: v >= 174 && r.sk(4) }), // film
+    0x39: r => ({ _a: r.sk(3), key: r.w(), _b: r.sk(52) }),
+    0x3A: (r, v) => ({ _a: r.sk(3), key: r.w(), next: r.w(), _b: r.sk(4), _c: v >= 174 && r.sk(4) }),
+    0x3B: (r, v) => { r.sk(3); const n = r.w(); r.sk(168); if (v >= 172) r.sk(4); r.str(n); return {}; }, // named property
+    0x3C: (r, v) => { r.sk(3); const o = { key: r.w() }; if (v >= 174) r.sk(4); const n = r.w(); if (n > 1e6) throw new Error("0x3C 计数异常"); r.sk(4 * n); return o; },
+    0x3E: r => ({ _a: r.sk(3), key: r.w(), _b: r.sk(36) }),
+  };
+  BLK[0x16] = BLK[0x17] = BLK[0x15];
+
+  // whole file → { v, H, str(id), byKey, blocks }. Throws a readable error when the stream does not decode cleanly.
+  function read(u8) {
+    const id = sniff(u8);
+    if (!id) throw new Error("不是 Cadence Allegro 的 .brd 文件");
+    if (!id.ok) throw new Error(id.why);
+    const v = id.v, what = `Allegro ${id.name} 格式（文件标识 ${hex(id.magic)}）`;
+    let r = new Rd(u8), t = -1, at = 0;
+    try {
+      const H = header(r, v);
+      if (!(H.div > 0) || ![1, 2, 3, 4, 5].includes(H.units)) throw new Error("文件头里的单位无法识别");
+      const S = new Map(); r.p = 0x1200; // string table at a fixed offset: [u32 id][zero-terminated text, padded to 4 bytes]
+      for (let k = 0; k < H.nStr; k++) { const sid = r.w(), s = r.p; let e = s; while (e < u8.length && u8[e]) e++; if (e >= u8.length) throw new RangeError("字符串表越界"); S.set(sid, decode(u8.subarray(s, e))); r.p = (e + 4) & ~3; }
+      const blocks = [], byKey = new Map();
+      while (r.p < u8.length) {
+        at = r.p; t = u8[at];
+        if (t === 0) { for (let q = at; q < u8.length; q++) if (u8[q]) throw new Error(`第 ${blocks.length} 个对象之后数据错位`); break; } // only zero padding may follow
+        const f = BLK[t]; if (!f || (at & 3)) throw new Error(`遇到无法识别的对象 0x${t.toString(16)}（偏移 ${hex(at)}）`);
+        r.p = at + 1; const o = f(r, v, H); o.t = t; blocks.push(o); if (o.key) byKey.set(o.key, o);
+      }
+      return { v, name: id.name, H, S, str: k => S.get(k) ?? "", byKey, blocks, tested: TESTED.has(v) };
+    } catch (e) { throw new Error(`${what}解析失败：${e instanceof RangeError ? "数据越界（文件不完整或已损坏）" : e.message}${t >= 0 ? `（对象类型 0x${t.toString(16)}，偏移 ${hex(at)}）` : ""}。${FALLBACK}`); }
+  }
+
+  // ---------- board model ----------
+  const UNIT = { 1: 0.0254, 2: 25.4, 3: 1, 4: 10, 5: 0.001 }; // mils, inch, mm, cm, µm
+  function parse(u8, fileName) {
+    const db = read(u8);
+    let b;
+    try { b = build(db, fileName); } catch (e) { throw new Error(`Allegro ${db.name} 格式的 ${fileName || ".brd"} 转换失败：${e.message}。${FALLBACK}`); }
+    if (!b.parts.length) throw new Error(`Allegro ${db.name} 格式的 ${fileName || ".brd"} 里没有读到已放置的器件（可能是封装库或空板）`);
+    return b;
+  }
+  function build(db, fileName) {
+    const { v, H, str, byKey, blocks } = db;
+    const sc = UNIT[H.units] / H.div, P = (x, y) => [x * sc, -y * sc]; // Allegro is y-up → flip
+    const chain = (head, stop, nx = "next") => { const out = [], seen = new Set(); for (let k = head; k && k !== stop && !seen.has(k) && out.length < 1e6; ) { const b = byKey.get(k); if (!b) break; seen.add(k); out.push(b); k = b[nx]; } return out; };
+    const warn = [];
+    if (!db.tested) warn.push(`这个 Allegro 文件是 ${db.name} 格式，本工具只用 16.6 / 17.4 / 18.1 / 19.0 格式的板子实测过，请对照原设计核对位置和网络`);
+    // net of a pad / track / via: through a 0x04 assignment, or a direct 0x1B net
+    const netOf = k => { let b = byKey.get(k); if (b && b.t === 0x04) b = byKey.get(b.net); return b && b.t === 0x1B ? str(b.name) : ""; };
+    // one line (0x15–0x17) or arc (0x01) segment → points in board mm, null for anything else
+    function segPts(s) {
+      if (s.t >= 0x15 && s.t <= 0x17) return [P(s.x0, s.y0), P(s.x1, s.y1)];
+      if (s.t !== 0x01) return null;
+      const a = P(s.x0, s.y0), e = P(s.x1, s.y1), c = P(s.cx, s.cy), rr = Math.hypot(a[0] - c[0], a[1] - c[1]), t0 = Math.atan2(a[1] - c[1], a[0] - c[0]);
+      let sw = Math.atan2(e[1] - c[1], e[0] - c[0]) - t0;
+      if (s.sub & 0x40) { if (sw <= 1e-9) sw += 2 * Math.PI; } else if (sw >= -1e-9) sw -= 2 * Math.PI; // bit 6 = sweep direction (angle grows in the y-down frame)
+      if (s.x0 === s.x1 && s.y0 === s.y1) sw = 2 * Math.PI; // full circle
+      const n = Math.max(2, Math.ceil(Math.abs(sw) / (Math.PI / 18))), pts = [a];
+      for (let k = 1; k <= n; k++) pts.push([c[0] + rr * Math.cos(t0 + sw * k / n), c[1] + rr * Math.sin(t0 + sw * k / n)]);
+      return pts;
+    }
+    // a chain of segments → [[polyline points], …]; a gap starts a new run
+    function runs(head) {
+      const out = []; let cur = null, last = null;
+      for (const s of chain(head, 0)) {
+        const pts = segPts(s); if (!pts) break;
+        if (!cur || Math.hypot(pts[0][0] - last[0], pts[0][1] - last[1]) > 1e-4) out.push(cur = [pts[0]]);
+        cur.push(...pts.slice(1)); last = pts[pts.length - 1];
+      }
+      return out;
+    }
+    const pathOf = list => list.map(p => G.lineD(p)).join("");
+    // geometry of a graphics item: 0x14 container, 0x28 shape, 0x24 / 0x0E rectangle, 0x34 keepout
+    function itemRuns(b) {
+      if (b.t === 0x14 || b.t === 0x28 || b.t === 0x34) return runs(b.seg);
+      if (b.t === 0x24 || b.t === 0x0E) { // corners, rotated about the first one
+        const [x0, y0, x1, y1] = b.c, a = (b.rot || 0) / 1000 * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+        const q = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => P(x0 + (x - x0) * cs - (y - y0) * sn, y0 + (x - x0) * sn + (y - y0) * cs));
+        return [q];
+      }
+      return [];
+    }
+    const lay = (b, cl, ...subs) => b.ly && b.ly[0] === cl && subs.includes(b.ly[1]);
+
+    // copper layers: ETCH class layer list from the header layer map (index = class code)
+    const etchList = byKey.get((H.layerMap[6] || [])[1]);
+    let nCu = etchList && etchList.t === 0x2A ? etchList.names.length : 0;
+    if (!nCu) nCu = 1 + blocks.reduce((m, t) => t.t === 0x05 && t.ly[0] === 6 ? Math.max(m, t.ly[1]) : m, 0);
+
+    // ---- board outline, board-level silkscreen ----
+    const b = G.newBoard(), edgePts = [], gfx = [];
+    for (const ll of ["x24_28", "shapes", "x14"]) gfx.push(...chain(H.ll[ll].head, H.ll[ll].tail));
+    let edge = gfx.filter(g => lay(g, 0x01, 0xEA)); // BOARD GEOMETRY / OUTLINE
+    if (!edge.length) edge = gfx.filter(g => lay(g, 0x01, 0xFD)); // … or DESIGN_OUTLINE
+    const edgeRuns = edge.flatMap(itemRuns);
+    b.edges = edgeRuns.map(p => G.polyD(p.length > 2 && Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 1e-4 ? p.slice(0, -1) : p)).join("");
+    edgePts.push(...edgeRuns.flat());
+    const silkSide = g => lay(g, 0x01, 0xF1) || lay(g, 0x07, 0xF4) ? "F" : lay(g, 0x01, 0xF0) || lay(g, 0x07, 0xF3) ? "B" : null; // board silkscreen / autosilk
+    const silk = { F: [], B: [] };
+    for (const g of gfx) { const s = silkSide(g); if (s) silk[s].push(pathOf(itemRuns(g))); }
+    b.silk = { F: silk.F.join(""), B: silk.B.join("") };
+
+    // ---- tracks and vias ----
+    const tr = { F: [], B: [] };
+    for (const t of blocks) {
+      if (t.t !== 0x05 || t.ly[0] !== 6) continue;
+      const side = t.ly[1] === 0 ? "F" : t.ly[1] === nCu - 1 ? "B" : null; if (!side) continue;
+      const net = netOf(t.na);
+      for (const s of chain(t.seg, 0)) { const pts = segPts(s); if (!pts) break; tr[side].push([s.width * sc, G.lineD(pts), net]); }
+    }
+    b.tracks = { F: G.groupTracks(tr.F), B: G.groupTracks(tr.B) };
+
+    // ---- padstacks ----
+    const firstCu = ps => { for (let li = 0; li < ps.layers; li++) { const c = ps.comps[ps.fixed + li * ps.per + 2]; if (c && c.t) return c; } return null; };
+    const unknownShapes = new Set();
+    // pad copper outline in padstack units around the pad origin, y up
+    function padShape(ps) {
+      const c = firstCu(ps); if (!c) return null;
+      const w = Math.abs(c.w), h = Math.abs(c.h), m = Math.min(w, h);
+      const chamf = k => { const x = w / 2, y = h / 2; return [[-x + k, -y], [x - k, -y], [x, -y + k], [x, y - k], [x - k, y], [-x + k, y], [-x, y - k], [-x, -y + k]]; };
+      let poly;
+      switch (c.t) {
+        case 0x02: poly = Math.abs(w - h) < 1 ? G.circ(0, 0, w / 2) : G.rrect(w, h, m / 2, 6); break; // circle
+        case 0x05: poly = G.rect(w, w); break; // square
+        case 0x06: poly = G.rect(w, h); break; // rectangle
+        case 0x0B: case 0x0C: poly = G.rrect(w, h, m / 2, 6); break; // oblong
+        case 0x1B: poly = G.rrect(w, h, c.z1 > 0 ? c.z1 : m / 4); break; // rounded rectangle, z1 = corner radius
+        case 0x1C: poly = chamf(c.z1 > 0 ? Math.min(c.z1, m / 2) : m / 4); break; // chamfered rectangle
+        case 0x03: poly = chamf(m * (1 - Math.SQRT1_2)); break; // octagon
+        case 0x16: { const sh = byKey.get(c.shape), rr = sh && sh.t === 0x28 ? runs(sh.seg).flat().map(([x, y]) => [x / sc, -y / sc]) : []; if (rr.length > 2) { poly = rr; break; } } // shape symbol: its own polygon
+        // falls through
+        default: unknownShapes.add(c.t); poly = G.rect(w, h);
+      }
+      return poly.map(([x, y]) => [x + c.ox, y + c.oy]);
+    }
+    function drillOf(ps) { // [w, h] in padstack units, 0 when SMD
+      let dw = ps.slotY > 0 ? ps.slotX : ps.drill, dh = ps.slotY > 0 ? ps.slotY : dw;
+      const c = firstCu(ps); if (dw !== dh && c && (Math.abs(c.h) > Math.abs(c.w)) !== (dh > dw)) [dw, dh] = [dh, dw]; // slots are stored long side first
+      return dw > 0 && ps.layers > 1 ? [dw, dh] : null;
+    }
+
+    // ---- footprints ----
+    const devOf = {}; // 0x07 instance → its 0x06 component (device type, value)
+    for (const c of chain(H.ll.x06.head, H.ll.x06.tail)) {
+      const fields = chain(c.fields, 0).filter(f => f.t === 0x03);
+      const val = (fields.find(f => f.code === 0x02 && typeof f.val === "string") || {}).val || "";
+      for (const i of chain(c.inst, c.key)) if (i.t === 0x07) devOf[i.key] = { dev: str(c.dev), val };
+    }
+    let noRef = 0;
+    for (const def of chain(H.ll.x2B.head, H.ll.x2B.tail)) {
+      const fp = str(def.name);
+      for (const inst of chain(def.inst, def.key)) {
+        if (inst.t !== 0x2D) continue;
+        const ci = byKey.get(inst.inst), ref = ci && ci.t === 0x07 ? str(ci.ref) : "", dv = ci ? devOf[ci.key] || {} : {};
+        const side = inst.layer ? "B" : "F", a = inst.rot / 1000, ar = a * Math.PI / 180, cs = Math.cos(ar), sn = Math.sin(ar), mx = inst.layer ? -1 : 1;
+        // footprint-local (y up) → board: mirror for the bottom side, rotate counter-clockwise, then place
+        const T = (x, y) => { x *= mx; return P(inst.x + x * cs - y * sn, inst.y + x * sn + y * cs); };
+        const recs = [];
+        for (const pp of chain(inst.pad, inst.key, "nextInFp")) {
+          const pd = byKey.get(pp.pad), ps = pd && byKey.get(pd.ps); if (!pd || pd.t !== 0x0D || !ps || ps.t !== 0x1C) continue;
+          const pa = pd.rot / 1000 * Math.PI / 180, pc = Math.cos(pa), pn = Math.sin(pa);
+          const toB = ([x, y]) => T(pd.x + x * pc - y * pn, pd.y + x * pn + y * pc);
+          const dr = drillOf(ps), shape = padShape(ps);
+          if (!shape && !dr) continue; // no copper and no hole
+          const kind = dr ? (ps.flags & (v < 172 ? 0x01 : 0x20) ? 1 : 2) : 0; // plated flag moved in 17.2
+          const hole = dr ? (dr[0] === dr[1] ? G.circ(0, 0, dr[0] / 2, 20) : G.rrect(dr[0], dr[1], Math.min(...dr) / 2, 6)).map(toB) : null;
+          const polys = shape ? [shape.map(toB)] : [hole];
+          recs.push(G.padRec(str(pd.name), kind === 2 ? "" : netOf(pp.net), polys, kind, hole && shape ? G.polyD(hole.slice().reverse()) : ""));
+        }
+        if (!recs.length && !ref) continue; // logos, dimensions, drawing symbols
+        // outline graphics are stored on the board already placed
+        const own = [...chain(inst.gfx, inst.key), ...chain(inst.areas, inst.key), ...chain(inst.asm, inst.key)];
+        const pick = (...subs) => own.filter(g => lay(g, 0x09, ...subs)).flatMap(itemRuns);
+        const silkRuns = pick(side === "F" ? 0xF7 : 0xF6), body = pick(side === "F" ? 0xFD : 0xFC), place = pick(side === "F" ? 0xFB : 0xFA);
+        let bb = G.bboxOf(place.length ? place.flat() : recs.flatMap(q => [[q[7][0], q[7][1]], [q[7][2], q[7][3]]]).concat(body.flat()));
+        const c0 = P(inst.x, inst.y);
+        if (!G.validBB(bb)) bb = [c0[0] - .5, c0[1] - .5, c0[0] + .5, c0[1] + .5];
+        const p1 = recs.find(q => q[0] === "1") || recs.find(q => q[0] === "A1");
+        b.parts.push({ r: ref || `${fp || "MECH"}-${++noRef}`, s: side, c: c0.map(G.f3), rot: ((a % 360) + 360) % 360, bb: bb.map(G.f3), pads: recs, body: pathOf(body), silk: pathOf(silkRuns),
+          val: dv.val || "", fp, props: dv.dev ? { Device: dv.dev } : {}, sheet: "", p1: p1 ? [p1[4], p1[5]] : null, tht: recs.length && recs.every(q => q[3] !== 0) ? 1 : 0, dnp: 0, nobom: ref ? 0 : 1 });
+      }
+    }
+    for (const t of blocks) {
+      if (t.t !== 0x33) continue;
+      const ps = byKey.get(t.ps), c = ps && ps.t === 0x1C && firstCu(ps), q = P(t.x, t.y);
+      b.vias.push([G.f3(q[0]), G.f3(q[1]), G.f3(c ? Math.max(Math.abs(c.w), Math.abs(c.h)) * sc / 2 : 0.15), netOf(t.net)]);
+    }
+    if (unknownShapes.size) warn.push(`有 ${unknownShapes.size} 种焊盘形状（Allegro 代码 ${[...unknownShapes].map(t => "0x" + t.toString(16)).join("、")}）按矩形画出，尺寸是外框`);
+    b.warn = warn; b.file = fileName;
+    return G.finishBoard(b, edgePts);
+  }
+  return { parse, read, sniff };
+})();
+
+// ===== export/altium_schlib.js =====
+// Native Altium SchLib writer: OLE2/CFB, text primitives and binary pins.
+globalThis.AltiumSchLib = (() => {
+  const U = 0.254, END = 0xfffffffe, FREE = 0xffffffff, FAT = 0xfffffffd, NONE = 0xffffffff;
+  const uid = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ("PSN" + (h >>> 0).toString(36).toUpperCase()).slice(0, 8).padEnd(8, "X"); };
+  const bgr = c => { const m = /^#?([\da-f]{6})$/i.exec(c || ""); return m ? parseInt(m[1].slice(0, 2), 16) | parseInt(m[1].slice(2, 4), 16) << 8 | parseInt(m[1].slice(4), 16) << 16 : 0; };
+  const lineWidth = w => w >= 0.9 ? 3 : w >= 0.4 ? 2 : w >= 0.2 ? 1 : 0;
+  function propertyBytes(props) {
+    const chunks = [], ascii = s => Array.from(s, c => c.charCodeAt(0) & 255);
+    for (const [key, value] of Object.entries(props)) {
+      if (value === undefined || value === null || value === "") continue;
+      const s = String(value).replace(/\|/g, "\x8e"), k = key.replace(/^%UTF8%/, "");
+      chunks.push(124);
+      if (/[^\x00-\x7f]/.test(s) && key !== "HEADER") chunks.push(...ascii("%UTF8%" + k + "="), ...new TextEncoder().encode(s), 124, 124, 124, ...ascii(k + "="), ...Array.from(s, () => 63));
+      else chunks.push(...ascii(k + "="), ...ascii(s));
+    }
+    chunks.push(0); return new Uint8Array(chunks);
+  }
+  function frame(payload, binary = false) {
+    const out = new Uint8Array(payload.length + 4), dv = new DataView(out.buffer);
+    dv.setUint32(0, payload.length | (binary ? 0x01000000 : 0), true); out.set(payload, 4); return out;
+  }
+  const textRecord = o => frame(propertyBytes(o));
+  const concat = parts => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let p = 0; for (const b of parts) { out.set(b, p); p += b.length; } return out; };
+  function coord(o, key, value) {
+    const v = Math.round(value * 100000) / 100000, i = Math.trunc(v), f = Math.round((v - i) * 100000);
+    if (i) o[key] = i; if (f) o[key + "_FRAC"] = f;
+  }
+  function pathPoints(d) {
+    const tokens = d.match(/[a-z]|[-+]?(?:\d*\.)?\d+(?:e[-+]?\d+)?/gi) || [], out = [];
+    let i = 0, p = [0, 0], points = [];
+    const flush = () => { if (points.length > 1) out.push(points); points = []; };
+    const nums = n => tokens.slice(i, i += n).map(Number);
+    while (i < tokens.length) {
+      const op = tokens[i++];
+      if (op === "Z" || op === "z") { flush(); continue; }
+      if (op === "M" || op === "L") { const q = nums(2); if (op === "M") flush(); p = q; points.push(q); }
+      else if (op === "C") { const q = nums(6); if (points.length !== 1) points.push(p); points.push(...q.reduce((a, v, j) => j % 2 ? a : [...a, [v, q[j + 1]]], [])); p = q.slice(4); flush(); }
+      else if (op === "a") {
+        const [rx0, ry0, deg, large, sweep, dx, dy] = nums(7), x2 = p[0] + dx, y2 = p[1] + dy;
+        let rx = Math.abs(rx0), ry = Math.abs(ry0); if (!rx || !ry) { points.push([x2, y2]); p = [x2, y2]; continue; }
+        const phi = deg * Math.PI / 180, co = Math.cos(phi), si = Math.sin(phi), ax = (p[0] - x2) / 2, ay = (p[1] - y2) / 2;
+        const x1 = co * ax + si * ay, y1 = -si * ax + co * ay, lambda = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry); if (lambda > 1) { const s = Math.sqrt(lambda); rx *= s; ry *= s; }
+        const den = rx * rx * y1 * y1 + ry * ry * x1 * x1, sign = large !== sweep ? 1 : -1;
+        const k = sign * Math.sqrt(Math.max(0, (rx * rx * ry * ry - den) / den)), cx1 = k * rx * y1 / ry, cy1 = -k * ry * x1 / rx;
+        const cx = co * cx1 - si * cy1 + (p[0] + x2) / 2, cy = si * cx1 + co * cy1 + (p[1] + y2) / 2;
+        const angle = (ux, uy, vx, vy) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        const start = angle(1, 0, (x1 - cx1) / rx, (y1 - cy1) / ry);
+        let delta = angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
+        if (!sweep && delta > 0) delta -= Math.PI * 2; if (sweep && delta < 0) delta += Math.PI * 2;
+        const n = Math.max(2, Math.ceil(Math.abs(delta) * 12 / Math.PI));
+        for (let j = 1; j <= n; j++) { const a = start + delta * j / n, x = rx * Math.cos(a), y = ry * Math.sin(a); points.push([cx + co * x - si * y, cy + si * x + co * y]); }
+        p = [x2, y2];
+      } else if (/^[A-Z]$/.test(op)) { p = nums(op === "C" ? 6 : 2).slice(-2); points.push(p); }
+    }
+    flush(); return out;
+  }
+  class Bytes {
+    constructor() { this.a = []; }
+    u8(v) { this.a.push(v & 255); }
+    u16(v) { this.u8(v); this.u8(v >> 8); }
+    i16(v) { this.u16(v); }
+    u32(v) { this.u16(v); this.u16(v >> 16); }
+    str(s) { const b = Array.from(s || "", c => /[\x00-\x7f]/.test(c) ? c.charCodeAt(0) : 63); this.u8(b.length); this.a.push(...b); }
+    done() { return new Uint8Array(this.a); }
+  }
+  function pinRecord(p, origin, part = 1) {
+    const b = new Bytes(), dx = p.ex - p.x, dy = p.y - p.ey;
+    const orientation = Math.abs(dx) >= Math.abs(dy) ? dx >= 0 ? 0 : 2 : dy >= 0 ? 1 : 3;
+    const flags = ((p.flags ?? 0x20) & 0xfc) | orientation;
+    b.u32(2); b.u8(0); b.i16(part); b.u8(0);
+    for (let i = 0; i < 4; i++) b.u8(p.symbols?.[i] || 0);
+    b.str(p.description || ""); b.u8(1); b.u8(p.electrical ?? 4); b.u8(flags);
+    b.i16(Math.round(Math.hypot(dx, dy) / U)); b.i16(Math.round((p.x - origin[0]) / U)); b.i16(Math.round((origin[1] - p.y) / U));
+    b.u32(p.color || 0); b.str(p.name); b.str(p.number); b.str(""); b.str("|&|"); b.str("");
+    return frame(b.done(), true);
+  }
+  function symbol(comp, source, names) {
+    const baseOrigin = comp.origin || [(comp.bb[0] + comp.bb[2]) / 2, (comp.bb[1] + comp.bb[3]) / 2], units = source.units || [{ comp, source }];
+    let origin = baseOrigin;
+    const name = comp.library || comp.ref, records = [], pinCount = units.reduce((n, u) => n + u.comp.pins.length, 0);
+    const addText = o => { if (![44, 46, 48].includes(+o.RECORD)) o.UNIQUEID ||= uid(source + "/" + name + "/" + records.length); records.push(textRecord(o)); };
+    const pos = (o, x, y) => { coord(o, "LOCATION.X", (x - origin[0]) / U); coord(o, "LOCATION.Y", (origin[1] - y) / U); };
+    const fontId = size => size < 2.1 ? 2 : size < 2.25 ? 1 : 3;
+    addText({ RECORD: 1, LIBREFERENCE: name, COMPONENTDESCRIPTION: comp.description, PARTCOUNT: Math.max(2, ...units.map(u => u.comp.partCount || 2)), DISPLAYMODECOUNT: 1, INDEXINSHEET: -1, OWNERPARTID: -1, CURRENTPARTID: 1, LIBRARYPATH: "*", SOURCELIBRARYNAME: "*", SHEETPARTFILENAME: "*", TARGETFILENAME: "*", DESIGNITEMID: name, ALLPINCOUNT: pinCount, AREACOLOR: 11599871, COLOR: 128, PARTIDLOCKED: "T" });
+    let slot = 0;
+    for (const unit of units) {
+      origin = unit.comp.origin || baseOrigin;
+      for (const [d, c, fill, w, owner] of unit.source.shapes) {
+        if (owner !== unit.comp.index) continue;
+        for (const pts of pathPoints(d)) {
+          const bezier = pts.length === 4 && /C/i.test(d), o = { RECORD: bezier ? 5 : fill ? 7 : 6, ISNOTACCESIBLE: "T", OWNERPARTID: unit.comp.part || 1, LOCATIONCOUNT: pts.length };
+          if (slot) o.INDEXINSHEET = slot; slot++;
+          pts.forEach((p, i) => { coord(o, "X" + (i + 1), (p[0] - origin[0]) / U); coord(o, "Y" + (i + 1), (origin[1] - p[1]) / U); });
+          o.COLOR = bgr(c); if (fill) { o.AREACOLOR = bgr(fill); o.ISSOLID = "T"; } if (lineWidth(w)) o.LINEWIDTH = lineWidth(w); addText(o);
+        }
+      }
+      for (const pi of unit.comp.pins) records.push(pinRecord(unit.source.pins[pi], origin, unit.comp.part || 1)); slot += unit.comp.pins.length;
+      for (const t of unit.source.texts) {
+        if (t.owner !== unit.comp.index || t.text === unit.comp.ref || t.text === unit.comp.value) continue;
+        const o = { RECORD: 4, OWNERPARTID: unit.comp.part || 1, COLOR: bgr(t.color), FONTID: fontId(t.size), TEXT: t.text };
+        if (slot) o.INDEXINSHEET = slot; slot++;
+        pos(o, t.x, t.y); if (t.rot) o.ORIENTATION = t.anchor === "end" ? 3 : 1; else if (t.anchor === "end") o.ORIENTATION = 2; addText(o);
+      }
+    }
+    origin = baseOrigin;
+    const reference = { RECORD: 34, INDEXINSHEET: -1, OWNERPARTID: -1, COLOR: 8388608, FONTID: 1, TEXT: comp.ref.replace(/\d+[A-Za-z]*$/, "") + "?", NAME: "Designator", READONLYSTATE: 1, JUSTIFICATION: 1 };
+    pos(reference, origin[0], comp.bb[1] - 4); addText(reference);
+    const comment = { RECORD: 41, INDEXINSHEET: -1, OWNERPARTID: -1, COLOR: 8388608, FONTID: 1, TEXT: comp.value || "*", NAME: "Comment", JUSTIFICATION: 1 };
+    pos(comment, origin[0], comp.bb[3] + 4); addText(comment);
+    for (const [key, value] of Object.entries(comp.properties || {})) {
+      if (!value || ["Comment", "SourceDesignator", "SourceFigure", "PCBFootprintStatus", "ReviewNotes", "Designator", "PinUniqueId"].includes(key)) continue;
+      const o = { RECORD: 41, OWNERPARTID: -1, ISHIDDEN: "T", TEXT: value, NAME: key }; if (slot) o.INDEXINSHEET = slot; slot++; addText(o);
+    }
+    if (comp.footprint) {
+      const list = records.length; addText({ RECORD: 44 });
+      const model = records.length; addText({ RECORD: 45, OWNERINDEX: list, INDEXINSHEET: -1, MODELNAME: comp.footprint, MODELTYPE: "PCBLIB", DATAFILECOUNT: 1, MODELDATAFILEENTITY0: comp.footprint, MODELDATAFILEKIND0: "PCBLib", ISCURRENT: "T" });
+      addText({ RECORD: 46, OWNERINDEX: model }); addText({ RECORD: 48, OWNERINDEX: model });
+    } else addText({ RECORD: 44 });
+    names.add(name); return { name, description: comp.description, data: concat(records), count: records.length, pins: pinCount };
+  }
+  function directoryEntry(e) {
+    const b = new Uint8Array(128), dv = new DataView(b.buffer), name = e.name || "";
+    for (let i = 0; i < Math.min(31, name.length); i++) dv.setUint16(i * 2, name.charCodeAt(i), true);
+    dv.setUint16(64, (Math.min(31, name.length) + (name ? 1 : 0)) * 2, true); b[66] = e.type || 0; b[67] = e.black ? 1 : 0;
+    dv.setUint32(68, e.left ?? NONE, true); dv.setUint32(72, e.right ?? NONE, true); dv.setUint32(76, e.child ?? NONE, true);
+    dv.setUint32(116, e.start ?? END, true); dv.setUint32(120, e.size || 0, true); return b;
+  }
+  function cfb(streams) {
+    const entries = [{ name: "Root Entry", type: 5, children: [] }];
+    for (const [path, data] of Object.entries(streams)) {
+      const parts = path.split("/"); let parent = entries[0];
+      for (let i = 0; i < parts.length - 1; i++) {
+        let child = parent.children.find(e => e.name === parts[i]);
+        if (!child) { child = { name: parts[i], type: 1, children: [] }; entries.push(child); parent.children.push(child); }
+        parent = child;
+      }
+      const file = { name: parts.at(-1), type: 2, children: [], data, size: data.length, start: END }; entries.push(file); parent.children.push(file);
+    }
+    entries.forEach((e, i) => e.id = i);
+    const small = entries.filter(e => e.type === 2 && e.size < 4096), miniFat = [], chunks = [];
+    let miniCount = 0;
+    for (const e of small) {
+      e.start = miniCount;
+      for (let p = 0; p < e.size; p += 64) { const b = new Uint8Array(64); b.set(e.data.subarray(p, Math.min(p + 64, e.size))); chunks.push(b); miniFat.push(++miniCount); }
+      if (miniCount) miniFat[e.start + Math.ceil(e.size / 64) - 1] = END;
+    }
+    const miniStream = concat(chunks), regular = entries.filter(e => e.type === 2 && e.size >= 4096);
+    const regularSectors = regular.reduce((n, e) => n + Math.ceil(e.size / 512), 0), dirSectors = Math.ceil(entries.length * 128 / 512), miniFatSectors = Math.ceil(miniFat.length * 4 / 512), miniStreamSectors = Math.ceil(miniStream.length / 512);
+    let fatCount = 1;
+    for (;;) { const n = Math.ceil((fatCount + dirSectors + miniFatSectors + miniStreamSectors + regularSectors) / 128); if (n === fatCount) break; fatCount = n; }
+    const fat = new Uint32Array(fatCount * 128); fat.fill(FREE);
+    const chain = (start, count, marker) => { for (let i = 0; i < count; i++) fat[start + i] = i === count - 1 ? END : start + i + 1; if (count) return start; return marker; };
+    let sector = fatCount;
+    const dirStart = sector; chain(dirStart, dirSectors, END); sector += dirSectors;
+    const miniFatStart = sector; chain(miniFatStart, miniFatSectors, END); sector += miniFatSectors;
+    const miniStreamStart = sector; chain(miniStreamStart, miniStreamSectors, END); sector += miniStreamSectors;
+    for (const e of regular) { e.start = sector; chain(sector, Math.ceil(e.size / 512), END); sector += Math.ceil(e.size / 512); }
+    for (let i = 0; i < fatCount; i++) fat[i] = FAT;
+    const link = list => {
+      if (!list.length) return NONE;
+      const sorted = list.slice().sort((a, b) => a.name.length - b.name.length || (a.name.toUpperCase() < b.name.toUpperCase() ? -1 : 1));
+      const make = (a, b, depth) => { if (a >= b) return NONE; const m = (a + b) >> 1, e = sorted[m]; e.left = make(a, m, depth + 1); e.right = make(m + 1, b, depth + 1); e.black = depth === 0; return e.id; };
+      return make(0, sorted.length, 0);
+    };
+    for (const e of entries) e.child = link(e.children);
+    const root = entries[0]; root.start = miniStreamStart; root.size = miniStream.length;
+    const dir = concat(entries.map(directoryEntry)), out = new Uint8Array((sector + 1) * 512), dv = new DataView(out.buffer);
+    [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].forEach((v, i) => out[i] = v);
+    dv.setUint16(24, 0x003e, true); dv.setUint16(26, 3, true); dv.setUint16(28, 0xfffe, true); dv.setUint16(30, 9, true); dv.setUint16(32, 6, true);
+    dv.setUint32(44, fatCount, true); dv.setUint32(48, dirStart, true); dv.setUint32(56, 4096, true);
+    dv.setUint32(60, miniFatStart, true); dv.setUint32(64, miniFatSectors, true); dv.setUint32(68, END, true); dv.setUint32(72, 0, true);
+    for (let i = 0; i < 109; i++) dv.setUint32(76 + i * 4, i < fatCount ? i : FREE, true);
+    for (let i = 0; i < fat.length; i++) out[512 + i * 4] = fat[i] & 255, out[513 + i * 4] = fat[i] >> 8 & 255, out[514 + i * 4] = fat[i] >> 16 & 255, out[515 + i * 4] = fat[i] >> 24 & 255;
+    out.set(dir, (dirStart + 1) * 512); out.set(new Uint8Array(new Uint32Array(miniFat).buffer), (miniFatStart + 1) * 512); if (miniStream.length) out.set(miniStream, (miniStreamStart + 1) * 512);
+    for (const e of regular) out.set(e.data, (e.start + 1) * 512);
+    return out;
+  }
+  function build(docs) {
+    if (!docs.length) throw new Error("没有可导出的原理图");
+    const symbols = [], names = new Set(), groups = new Map();
+    for (const doc of docs) for (const c of doc.components) {
+      const key = c.library || c.ref;
+      if (!groups.has(key)) groups.set(key, { comp: c, source: doc, units: [] });
+      groups.get(key).units.push({ comp: c, source: doc });
+    }
+    for (const g of groups.values()) {
+      const s = symbol(g.comp, { ...g.source, units: g.units }, names);
+      s.partCount = Math.max(2, ...g.units.map(u => u.comp.partCount || 2)); symbols.push(s);
+    }
+    const header = { HEADER: "Protel for Windows - Schematic Library Editor Binary File Version 5.0", WEIGHT: symbols.reduce((n, s) => n + s.count, 0) + 1, MINORVERSION: 9, UNIQUEID: uid(symbols.map(s => s.name).join("/")), FONTIDCOUNT: 3, SIZE1: 9, FONTNAME1: "Times New Roman", SIZE2: 7, FONTNAME2: "Times New Roman", SIZE3: 10, FONTNAME3: "Times New Roman", USEMBCS: "T", ISBOC: "T", SHEETSTYLE: 9, BORDERON: "T", SHEETNUMBERSPACESIZE: 12, AREACOLOR: 16317695, SNAPGRIDON: "T", SNAPGRIDSIZE: 10, VISIBLEGRIDON: "T", VISIBLEGRIDSIZE: 10, CUSTOMX: 18000, CUSTOMY: 18000, USECUSTOMSHEET: "T", REFERENCEZONESON: "T", DISPLAY_UNIT: 0, COMPCOUNT: symbols.length };
+    symbols.forEach((s, i) => { header["LIBREF" + i] = s.name; if (s.description) header["COMPDESCR" + i] = s.description; header["PARTCOUNT" + i] = s.partCount; });
+    const streams = { FileHeader: frame(propertyBytes(header)), Storage: textRecord({ HEADER: "Icon storage." }) };
+    for (const s of symbols) { if (s.name.length > 31) throw new Error(`符号名过长，无法在旧版 AD 存储中创建：${s.name}`); streams[s.name + "/Data"] = s.data; }
+    return { data: cfb(streams), components: symbols.length, pins: symbols.reduce((n, s) => n + s.pins, 0) };
+  }
+  return { build };
+})();
+
 // ===== core/project.js =====
 // Turns a pile of dropped files (folders, zips, mixed EDA outputs) into boards.
 globalThis.Project = (() => {
@@ -2720,19 +3614,26 @@ globalThis.Project = (() => {
     if (e.error) return { kind: "error" };
     if (x === "kicad_pcb") return { kind: "kicad" };
     if (x === "pcbdoc") return { kind: "altium" };
+    if (x === "schdoc") return { kind: "schdoc" };
     if (x === "eprj2" || x === "eprj") return { kind: "unsupported", why: "嘉立创EDA本地工程库（.eprj2）暂不能直接读，请在嘉立创EDA里用“文件 → 导出 → 工程”导出 .epro2 再拖进来" };
-    if (x === "brd" || x === "mcm" || x === "sip") return { kind: "unsupported", why: "Cadence Allegro .brd 是加密的二进制格式，请导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356" };
     if (x === "pcb" && /pads/i.test(name)) return { kind: "unsupported", why: "PADS 原文件请先导出 IPC-2581 或 ODB++" };
     if (/^(xls|doc|docx|pdf|png|jpg|jpeg|webp|step|stp|wrl|dxf|dwg|kicad_sch|kicad_pro|kicad_prl|schdoc|prjpcb|dsn|olb|lib|bak|log|jrl)$/.test(x)) return { kind: "ignore" };
     if (/(^|\/)(steps\/[^/]+\/|matrix\/matrix)/i.test(e.path)) return { kind: "odb" };
     if (/(^|\/)(fonts|symbols|misc|wheels|ext)\/[^/]*$/i.test(e.path) && /\/(fonts|symbols|misc)\//i.test(e.path)) return { kind: "ignore" };
     const size = e.size ?? 0;
-    if (size > 80e6) return { kind: "ignore" };
+    const allegroExt = x === "brd" || x === "mcm" || x === "sip";
+    if (size > 80e6 && !allegroExt) return { kind: "ignore" };
     let u8;
     try { u8 = await e.read(); } catch (err) { return { kind: "error", why: err.message }; }
     if (x === "xlsx") return { kind: "xlsx", u8 };
     const headBytes = u8.subarray(0, 8192);
     const head = Files.decodeText(headBytes);
+    if (allegroExt) { // Cadence Allegro database (.mcm / .sip use the same one); Eagle also writes .brd
+      const al = globalThis.ImpAllegro ? ImpAllegro.sniff(u8) : null;
+      if (al) return al.ok ? { kind: "allegro", u8, al } : { kind: "unsupported", why: al.why };
+      if (/<eagle[\s>]/i.test(head)) return { kind: "unsupported", why: "这是 Eagle / Fusion 360 的 .brd，请用 KiCad 打开（文件 → 导入 → 非 KiCad 工程）后另存为 .kicad_pcb，或导出 Gerber + 坐标文件再拖进来" };
+      return { kind: "unsupported", why: `不是能识别的 Cadence Allegro .${x} 文件，请在 Allegro 里导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356` };
+    }
     if (/^\s*\{"type":"DOCHEAD"/.test(head)) return { kind: "easyeda", text: () => Files.decodeText(u8) };
     if (/<IPC-2581[\s>]/.test(head)) return { kind: "ipc2581", text: () => Files.decodeText(u8) };
     if (/^\s*\(kicad_pcb/.test(head)) return { kind: "kicad", text: () => Files.decodeText(u8) };
@@ -2796,6 +3697,10 @@ globalThis.Project = (() => {
     }
     for (const c of C.filter(c => c.kind === "altium")) {
       try { add(ImpAltium.parse(await c.entry.read(), baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: "Altium PcbDoc" }); designDirs.push(c.dir); }
+      catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    for (const c of C.filter(c => c.kind === "allegro")) {
+      try { onProgress(`正在解析 ${baseOf(c.path)}`); add(ImpAllegro.parse(c.u8, baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: `Allegro .${ext(c.path)}` }); designDirs.push(c.dir); }
       catch (err) { errors.push(`${c.path}：${err.message}`); }
     }
     // EasyEDA: group docs by archive / directory
@@ -2915,7 +3820,7 @@ globalThis.Project = (() => {
     // outlines may differ between formats (an Altium export's board shape vs the 嘉立创 FPC outline), so across formats the parts' extent decides
     const sameSize = (s, t) => (Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2) || (s.src !== t.src && Math.abs(s.pw - t.pw) < 0.5 && Math.abs(s.ph - t.ph) < 0.5);
     // same board in several design formats: keep the native one
-    const PREF = ["KiCad", "嘉立创EDA专业版", "Altium", "嘉立创EDA标准版", "IPC-2581", "ODB++"];
+    const PREF = ["KiCad", "嘉立创EDA专业版", "Altium", "嘉立创EDA标准版", "Allegro", "IPC-2581", "ODB++"];
     const pref = b => { const i = PREF.findIndex(s => b.source.startsWith(s)); return i < 0 ? PREF.length : i; };
     // same board = most shared designators sit at the same place (after allowing for a different origin)
     const samePlacement = (s, t, common) => {
@@ -2964,8 +3869,16 @@ globalThis.Project = (() => {
       bd.bom = pick ? pick.bom : null; bd.bomFile = pick ? baseOf(pick.c.path) : "";
       if (!pick) { const fromCpl = tables.find(t => t.type === "bomFromCpl" && (t.c.dir === dd || isAncestor(dd, t.c.dir)) && fit(t)); if (fromCpl) { bd.bom = fromCpl.bom; bd.bomFile = baseOf(fromCpl.c.path); } }
     }
-    if (!boards.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子文件。支持：KiCad .kicad_pcb、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
-    return { boards, errors, notes };
+    const schematics = [];
+    for (const c of C.filter(c => c.kind === "schdoc")) {
+      try {
+        onProgress(`正在解析原理图 ${baseOf(c.path)}`);
+        const bytes = await c.entry.read(), doc = ImpAltiumSch.parse(bytes, c.path);
+        doc.adData = bytes; doc.file = c.path; schematics.push(doc);
+      } catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    if (!boards.length && !schematics.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
+    return { boards, schematics, errors, notes };
   }
   return { load, expand, classify };
 })();
@@ -3118,12 +4031,325 @@ globalThis.Enrich = (() => {
   return { enrich, STEPS, natcmp };
 })();
 
+// ===== cloud.js =====
+// Optional Supabase transport. No library is required; board parsing remains local.
+globalThis.Cloud = (() => {
+  const STORE_KEY = "psn:cloud";
+  const defaults = globalThis.PSN_CLOUD_CONFIG || {};
+  function read() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } }
+  const saved = read();
+  let config = { url: saved.config?.url || defaults.url || "", anonKey: saved.config?.anonKey || defaults.anonKey || "" };
+  let session = saved.session || null;
+  function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ config, session })); } catch (e) {} }
+  function configured() { return !!(config.url && config.anonKey); }
+  function state() { return { configured: configured(), url: config.url, anonKey: config.anonKey, email: session?.user?.email || "", userId: session?.user?.id || "", expiresAt: session?.expires_at || 0 }; }
+  function setConfig(url, anonKey) {
+    url = String(url || "").trim().replace(/\/+$/, "");
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.hostname !== "localhost" && u.hostname !== "127.0.0.1") throw new Error("云服务地址必须使用 HTTPS");
+    if (!String(anonKey || "").trim()) throw new Error("请填写 Supabase anon key");
+    if (url !== config.url || anonKey !== config.anonKey) session = null;
+    config = { url, anonKey: String(anonKey).trim() }; persist();
+  }
+  async function call(path, options = {}, token) {
+    if (!configured()) throw new Error("尚未配置云同步服务");
+    const headers = { apikey: config.anonKey, "Content-Type": "application/json", ...(options.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const r = await fetch(config.url + path, { ...options, headers });
+    if (!r.ok) {
+      let detail = {};
+      try { detail = await r.json(); } catch (e) {}
+      const err = new Error(detail.msg || detail.error_description || detail.error || `云服务返回 ${r.status}`);
+      err.status = r.status; throw err;
+    }
+    if (r.status === 204) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  }
+  function normalizeSession(s) {
+    if (!s?.access_token) throw new Error("登录响应无效");
+    session = { ...s, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (s.expires_in || 3600) };
+    persist(); return session;
+  }
+  async function refresh() {
+    if (!session?.refresh_token) { session = null; persist(); throw new Error("登录已过期，请重新登录"); }
+    try { return normalizeSession(await call("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: JSON.stringify({ refresh_token: session.refresh_token }) })); }
+    catch (e) { session = null; persist(); throw e; }
+  }
+  async function accessToken() {
+    if (!session) throw new Error("请先登录云同步");
+    if ((session.expires_at || 0) < Date.now() / 1000 + 30) await refresh();
+    return session.access_token;
+  }
+  async function api(path, options = {}, retry = true) {
+    try { return await call(path, options, await accessToken()); }
+    catch (e) {
+      if (e.status === 401 && retry && session?.refresh_token) { await refresh(); return api(path, options, false); }
+      throw e;
+    }
+  }
+  async function sendCode(email) {
+    email = String(email || "").trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("请输入有效邮箱");
+    await call("/auth/v1/otp", { method: "POST", body: JSON.stringify({ email, create_user: true }) });
+  }
+  async function signIn(email, token) {
+    const s = await call("/auth/v1/verify", { method: "POST", body: JSON.stringify({ type: "email", email: String(email || "").trim(), token: String(token || "").trim() }) });
+    return normalizeSession(s);
+  }
+  async function signOut() {
+    try { if (session?.access_token) await call("/auth/v1/logout", { method: "POST" }, session.access_token); }
+    finally { session = null; persist(); }
+  }
+  async function pull() { return api("/rest/v1/psn_boards?select=board_key,payload,updated_at,deleted"); }
+  async function push(rows) {
+    if (!rows.length) return;
+    const s = session?.user?.id ? session : await (async () => { await accessToken(); return session; })();
+    const body = rows.map(r => ({ ...r, user_id: s.user.id }));
+    await api("/rest/v1/psn_boards?on_conflict=user_id,board_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(body) });
+  }
+  return { state, setConfig, sendCode, signIn, signOut, pull, push };
+})();
+
+// ===== schematic.js =====
+// Schematic library UI. Parsed sheets are stored in a separate IndexedDB store.
+const SCH = { docs: [], doc: null, selection: null, net: -1, vb: null, labels: true, grid: true };
+const schSvg = $("#schSvg");
+function normalizeSchematic(d) {
+  if (d?.kind !== "schematic" || d.ver !== 1) return d;
+  const rgb = c => /^#[\da-f]{6}$/i.test(c || "") ? "#" + c.slice(5, 7) + c.slice(3, 5) + c.slice(1, 3) : c;
+  return { ...d, ver: 2,
+    shapes: d.shapes.map(s => [s[0], rgb(s[1]), rgb(s[2]), ...s.slice(3)]),
+    wires: d.wires.map(w => ({ ...w, color: rgb(w.color) })),
+    texts: d.texts.map(t => ({ ...t, color: rgb(t.color) })),
+    ports: d.ports.map(p => ({ ...p, color: rgb(p.color) })),
+  };
+}
+function setSchVB(v) { SCH.vb = v; schSvg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`); }
+function schFit() { if (SCH.doc) setSchVB({ x: -5, y: -SCH.doc.height - 5, w: SCH.doc.width + 10, h: SCH.doc.height + 10 }); }
+function schContent() {
+  const d = SCH.doc; if (!d) return;
+  const pts = d.wires.flatMap(w => w.points);
+  for (const c of d.components) if (c.bb) pts.push([c.bb[0], c.bb[1]], [c.bb[2], c.bb[3]]);
+  for (const p of d.ports) pts.push([p.x, p.y]);
+  if (pts.length) schFrame(Geom.bboxOf(pts), 18, 50); else schFit();
+}
+function schFrame(bb, pad = 7, min = 20) {
+  const w = Math.max(min, bb[2] - bb[0] + pad * 2), h = Math.max(min, bb[3] - bb[1] + pad * 2);
+  setSchVB({ x: (bb[0] + bb[2]) / 2 - w / 2, y: (bb[1] + bb[3]) / 2 - h / 2, w, h });
+}
+function schZoom(factor, x, y) {
+  if (!SCH.doc) return;
+  const v = SCH.vb, r = schSvg.getBoundingClientRect(), s = Math.min(r.width / v.w, r.height / v.h);
+  const px = x ?? r.width / 2, py = y ?? r.height / 2;
+  const wx = v.x + (px - (r.width - v.w * s) / 2) / s, wy = v.y + (py - (r.height - v.h * s) / 2) / s;
+  const w = Math.max(1, Math.min(SCH.doc.width * 2, v.w / factor)), k = w / v.w;
+  setSchVB({ x: wx - (wx - v.x) * k, y: wy - (wy - v.y) * k, w, h: v.h * k });
+}
+function schText(parent, t, color) {
+  const e = el("text", { x: t.x, y: t.y, "font-size": t.size, fill: color || t.color || "#263b35", "text-anchor": t.anchor || "start", transform: t.rot ? `rotate(${t.rot} ${t.x} ${t.y})` : "" }, parent);
+  e.textContent = t.text;
+}
+function renderSchSheet(fit = false) {
+  schSvg.innerHTML = "";
+  const d = SCH.doc;
+  $("#schEmpty").hidden = !!d;
+  $("#schSheetTools").hidden = !d;
+  $("#schExportLib").disabled = !d;
+  $("#schExportDoc").disabled = !d;
+  if (!d) { $("#schInspector").innerHTML = "<p>导入 .SchDoc 文件或 zip / rar 工程包后，可以在这里查看原理图。</p>"; return; }
+  $("#schTitle").textContent = d.title;
+  $("#schMeta").textContent = `${d.components.length} 个器件 · ${d.pins.length} 个引脚 · ${d.nets.filter(n => n.name).length} 个命名网络`;
+  const defs = el("defs", {}, schSvg), pattern = el("pattern", { id: "schGrid", width: 2.54, height: 2.54, patternUnits: "userSpaceOnUse" }, defs);
+  el("path", { d: "M2.54 0H0V2.54", fill: "none", stroke: "#dce4de", "stroke-width": 0.12 }, pattern);
+  el("rect", { x: 0, y: -d.height, width: d.width, height: d.height, fill: "#fffdfa" }, schSvg);
+  const grid = el("rect", { x: 0, y: -d.height, width: d.width, height: d.height, fill: "url(#schGrid)", "pointer-events": "none" }, schSvg); grid.toggleAttribute("hidden", !SCH.grid);
+  el("rect", { x: 0, y: -d.height, width: d.width, height: d.height, fill: "none", stroke: "#98a79d", "stroke-width": 0.3, "pointer-events": "none" }, schSvg);
+  const wg = el("g", {}, schSvg);
+  d.wires.forEach((w, i) => {
+    const p = el("path", { d: Geom.lineD(w.points), fill: "none", stroke: w.color || "#167147", "stroke-width": 0.35, "stroke-linecap": "round", "stroke-linejoin": "round", class: "sch-wire", "data-wire": i }, wg);
+    p.addEventListener("click", e => { if (schMoved) return; e.stopPropagation(); selectSchNet(w.net); });
+  });
+  const sg = el("g", {}, schSvg);
+  for (const [path, c, fill, w] of d.shapes) el("path", { d: path, fill: fill || "none", stroke: c, "stroke-width": w, "stroke-linecap": "round", "stroke-linejoin": "round" }, sg);
+  const pg = el("g", {}, schSvg);
+  for (const p of d.pins) el("path", { d: `M${p.x} ${p.y}L${p.ex} ${p.ey}`, fill: "none", stroke: "#3d4740", "stroke-width": 0.3 }, pg);
+  for (const p of d.junctions) el("circle", { cx: p[0], cy: p[1], r: 0.7, fill: "#17693c" }, pg);
+  for (const p of d.ports) {
+    const g = el("g", { transform: `translate(${p.x} ${p.y}) rotate(${p.type === 17 ? (3 - p.orientation) * 90 : 0})`, class: "sch-port", "data-port": d.ports.indexOf(p) }, pg);
+    if (p.type === 18) {
+      el("path", { d: "M0 0L3 -3H20V3H3Z", fill: "#fff4ad", stroke: p.color, "stroke-width": 0.3 }, g);
+    } else if (p.style === 4) el("path", { d: "M0 0L-3 5H3Z", fill: "none", stroke: p.color, "stroke-width": 0.35 }, g);
+    else if (p.style === 2 || p.style === 5 || p.style === 6) el("path", { d: "M0 0V3M-4 3H4M-2.5 4.5H2.5M-1 6H1", fill: "none", stroke: p.color, "stroke-width": 0.35 }, g);
+    else el("path", { d: "M0 0V4M-4 4H4M0 8L-3 4H3Z", fill: "none", stroke: p.color, "stroke-width": 0.35 }, g);
+    el("title", {}, g).textContent = p.name;
+    g.addEventListener("click", e => { if (schMoved) return; e.stopPropagation(); selectSchNet(p.netIndex); });
+  }
+  const tg = el("g", { class: "sch-labels" }, schSvg); tg.toggleAttribute("hidden", !SCH.labels);
+  for (const t of d.texts) schText(tg, t);
+  const hits = el("g", {}, schSvg);
+  d.components.forEach((c, i) => {
+    const b = c.bb, g = el("g", { class: "sch-component", "data-component": i }, hits);
+    el("rect", { x: b[0] - 2, y: b[1] - 2, width: Math.max(3, b[2] - b[0] + 4), height: Math.max(3, b[3] - b[1] + 4), fill: "transparent" }, g);
+    el("title", {}, g).textContent = `${c.ref} ${c.value}`;
+    g.addEventListener("click", e => { if (schMoved) return; e.stopPropagation(); selectSchComponent(i); });
+  });
+  renderSchSelection();
+  if (fit) schContent();
+}
+function renderSchSelection() {
+  schSvg.querySelectorAll(".sch-selection").forEach(e => e.remove());
+  const d = SCH.doc; if (!d) return;
+  const g = el("g", { class: "sch-selection", "pointer-events": "none" }, schSvg);
+  if (SCH.selection?.type === "component") {
+    const b = d.components[SCH.selection.index]?.bb; if (b) el("rect", { x: b[0] - 2, y: b[1] - 2, width: b[2] - b[0] + 4, height: b[3] - b[1] + 4, fill: "#cf1f6310", stroke: "#cf1f63", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g);
+  }
+  if (SCH.net >= 0) {
+    const n = d.nets[SCH.net]; if (!n) return;
+    for (const i of n.wires) el("path", { d: Geom.lineD(d.wires[i].points), fill: "none", stroke: "#8a3fe0", "stroke-width": 1.5, "vector-effect": "non-scaling-stroke", "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+    for (const i of n.pins) { const p = d.pins[i]; el("circle", { cx: p.ex, cy: p.ey, r: 2, fill: "none", stroke: "#8a3fe0", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g); }
+  }
+}
+function schDetailRow(parent, name, value) {
+  const dt = document.createElement("dt"); dt.textContent = name;
+  const dd = document.createElement("dd"); dd.textContent = value; parent.append(dt, dd);
+}
+function selectSchComponent(i, frame = true) {
+  const c = SCH.doc?.components[i]; if (!c) return;
+  SCH.selection = { type: "component", index: i }; SCH.net = -1;
+  const box = $("#schInspector"); box.innerHTML = "";
+  const h = document.createElement("h3"); h.textContent = c.ref;
+  const value = document.createElement("p"); value.className = "sch-value"; value.textContent = c.value || "未填写值";
+  const dl = document.createElement("dl");
+  if (c.description) schDetailRow(dl, "说明", c.description);
+  if (c.footprint) schDetailRow(dl, "封装", c.footprint);
+  schDetailRow(dl, "符号", c.library);
+  for (const [k, v] of Object.entries(c.properties)) if (v && k !== "Comment" && k !== "SourceDesignator" && k !== "Designator") schDetailRow(dl, k, v);
+  box.append(h, value, dl);
+  const nets = [...new Set(c.pins.map(i => SCH.doc.pins[i].net).filter(Boolean))];
+  if (nets.length) {
+    const p = document.createElement("p"); p.textContent = "相关网络"; box.appendChild(p);
+    const row = document.createElement("div"); row.className = "row";
+    for (const name of nets) { const b = document.createElement("button"); b.className = "tbtn"; b.textContent = name; b.onclick = () => selectSchNet(SCH.doc.nets.findIndex(n => n.name === name)); row.appendChild(b); }
+    box.appendChild(row);
+  }
+  renderSchSelection(); if (frame) schFrame(c.bb);
+}
+function selectSchNet(i) {
+  const n = SCH.doc?.nets[i]; if (!n) return;
+  SCH.net = i; SCH.selection = { type: "net", index: i };
+  const box = $("#schInspector"); box.innerHTML = "";
+  const h = document.createElement("h3"); h.textContent = n.name || `未命名网络 ${i + 1}`;
+  const p = document.createElement("p"); p.textContent = `${n.pins.length} 个器件引脚 · ${n.ports.length} 个网络标号`;
+  const dl = document.createElement("dl");
+  for (const pi of n.pins) {
+    const pin = SCH.doc.pins[pi], c = SCH.doc.components[pin.owner];
+    schDetailRow(dl, `${c?.ref || "器件"}.${pin.number}`, pin.name || "未命名引脚");
+  }
+  if (!n.pins.length) schDetailRow(dl, "连接", "该标号没有直接连接到器件引脚");
+  box.append(h, p, dl); renderSchSelection();
+  if (n.points.length) schFrame(Geom.bboxOf(n.points), 15, 50);
+}
+function schSearch() {
+  const q = $("#schSearch").value.trim().toLocaleLowerCase(), list = $("#schSearchResults"); list.innerHTML = "";
+  if (!SCH.doc || !q) return;
+  const hits = [];
+  SCH.doc.components.forEach((c, i) => { if (`${c.ref} ${c.value} ${c.description} ${c.footprint} ${Object.values(c.properties).join(" ")}`.toLocaleLowerCase().includes(q)) hits.push({ name: c.ref, sub: c.value || c.description, type: "component", index: i }); });
+  SCH.doc.nets.forEach((n, i) => { if (n.name && n.name.toLocaleLowerCase().includes(q)) hits.push({ name: n.name, sub: `${n.pins.length} 个引脚 · 网络`, type: "net", index: i }); });
+  for (const h of hits.slice(0, 60)) {
+    const b = document.createElement("button"); b.type = "button";
+    const name = document.createElement("b"), sub = document.createElement("span"); name.textContent = h.name; sub.textContent = h.sub;
+    b.append(name, sub); b.onclick = () => h.type === "component" ? selectSchComponent(h.index) : selectSchNet(h.index); list.appendChild(b);
+  }
+  if (!hits.length) list.innerHTML = "<p>没有找到匹配的器件或网络。</p>";
+  else if (hits.length > 60) { const p = document.createElement("p"); p.textContent = `共 ${hits.length} 项，仅显示前 60 项，请细化搜索。`; list.appendChild(p); }
+}
+function renderSchLibrary() {
+  const list = $("#schLibraryList"); list.innerHTML = "";
+  for (const d of SCH.docs) {
+    const item = document.createElement("div"); item.className = "sch-library-item" + (SCH.doc?.key === d.key ? " current" : "");
+    const open = document.createElement("button"); open.type = "button"; open.className = "sch-sheet-open";
+    const name = document.createElement("b"), meta = document.createElement("span"); name.textContent = d.title; meta.textContent = `${d.components.length} 器件 · ${d.file.split("/").pop()}`;
+    open.append(name, meta); open.onclick = () => openSchematic(d.key);
+    const del = document.createElement("button"); del.type = "button"; del.className = "tbtn danger"; del.textContent = "删除"; del.title = `删除 ${d.title}`;
+    del.onclick = () => twoStep(del, () => { removeSchematic(d.key); toast(`已删除原理图 ${d.title}`); });
+    item.append(open, del); list.appendChild(item);
+  }
+  $("#schCount").textContent = `${SCH.docs.length} 页`;
+  $("#schTopCount").textContent = `${SCH.docs.length} 页`;
+}
+function openSchematic(key) {
+  SCH.doc = SCH.docs.find(d => d.key === key) || SCH.docs[0] || null;
+  SCH.selection = null; SCH.net = -1; SCH.vb = null;
+  $("#schSearch").value = ""; $("#schSearchResults").innerHTML = "";
+  $("#schInspector").innerHTML = SCH.doc ? "<p>点击图中的器件或导线查看详情。也可以搜索位号、参数或网络名称。</p>" : "<p>点“导入原理图”选择 AD .SchDoc 文件或工程压缩包。</p>";
+  renderSchLibrary(); renderSchSheet(true);
+}
+function showSchematics() { disarm(); if (!SCH.doc && SCH.docs.length) openSchematic(SCH.docs[0].key); renderSchLibrary(); openDialog("#schDialog"); if (SCH.doc) requestAnimationFrame(schContent); }
+function removeSchematic(k) {
+  markDeleted(k); DB.del(k, "schematics"); DB.del(k, "schSources"); SCH.docs = SCH.docs.filter(d => d.key !== k);
+  if (SCH.doc?.key === k) openSchematic(SCH.docs[0]?.key); else renderSchLibrary();
+}
+function ingestSchematics(docs, roots) {
+  const added = new Set();
+  for (const d of docs) {
+    d.key = "sch:" + d.file;
+    const i = SCH.docs.findIndex(x => x.key === d.key); d.added = i >= 0 ? SCH.docs[i].added : Date.now();
+    if (i >= 0) SCH.docs[i] = d; else SCH.docs.push(d);
+    const source = d.adData; delete d.adData;
+    if (source) DB.put({ key: d.key, name: d.file.split("/").pop(), data: source }, "schSources");
+    DB.put(d, "schematics"); markDirty(d.key); added.add(d.key);
+  }
+  for (const d of SCH.docs.filter(d => [...roots].some(r => d.file.startsWith(r + "/")) && !added.has(d.key))) removeSchematic(d.key);
+  return added.size;
+}
+function schDownload(data, name) {
+  const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+  const a = document.createElement("a"); a.href = url; a.download = name.replace(/[\\/:*?"<>|]/g, "_"); a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+$("#schBtn").onclick = showSchematics;
+$("#schAdd").onclick = () => $("#inFiles").click();
+$("#schFit").onclick = schFit; $("#schContentBtn").onclick = schContent; $("#schZoomIn").onclick = () => schZoom(1.3); $("#schZoomOut").onclick = () => schZoom(1 / 1.3);
+$("#schSearch").addEventListener("input", schSearch);
+$("#schClear").onclick = () => { $("#schSearch").value = ""; $("#schSearchResults").innerHTML = ""; SCH.selection = null; SCH.net = -1; renderSchSelection(); };
+$("#schLabels").onclick = e => { SCH.labels = !SCH.labels; e.currentTarget.setAttribute("aria-pressed", SCH.labels); schSvg.querySelector(".sch-labels")?.toggleAttribute("hidden", !SCH.labels); };
+$("#schGridBtn").onclick = e => { SCH.grid = !SCH.grid; e.currentTarget.setAttribute("aria-pressed", SCH.grid); schSvg.querySelector('[fill="url(#schGrid)"]')?.toggleAttribute("hidden", !SCH.grid); };
+$("#schExportLib").onclick = () => {
+  try {
+    const result = AltiumSchLib.build(SCH.docs), root = (SCH.doc?.file.split("/")[0] || "SchematicSymbols").replace(/\.(zip|rar|schdoc)$/i, "");
+    schDownload(result.data, root + ".SchLib"); toast(`已导出 SchLib：${result.components} 个符号，${result.pins} 个引脚`);
+  } catch (e) { toast("导出 SchLib 失败：" + e.message, 6000); }
+};
+$("#schExportDoc").onclick = async e => {
+  const d = SCH.doc, btn = e.currentTarget; if (!d) return; btn.disabled = true;
+  try {
+    const source = await DB.get(d.key, "schSources");
+    if (!source?.data) { toast("本机没有这份原始文件。请重新导入 .SchDoc 或原压缩包后再下载；SchLib 仍可导出。", 6000); return; }
+    schDownload(source.data, source.name || d.file.split("/").pop()); toast("已下载原始 SchDoc，文件内容未修改");
+  } finally { btn.disabled = !SCH.doc; }
+};
+schSvg.addEventListener("wheel", e => { if (!SCH.doc) return; e.preventDefault(); const r = schSvg.getBoundingClientRect(); schZoom(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+const schPtrs = new Map(); let schMoved = false, schDown = null;
+schSvg.addEventListener("pointerdown", e => { if (!schPtrs.size) { schDown = { x: e.clientX, y: e.clientY }; schMoved = false; } else schMoved = true; schPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); schSvg.setPointerCapture(e.pointerId); });
+schSvg.addEventListener("pointermove", e => {
+  if (!schPtrs.has(e.pointerId) || !SCH.doc) return;
+  const prev = schPtrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+  if (schDown && Math.hypot(cur.x - schDown.x, cur.y - schDown.y) > 5) schMoved = true;
+  if (schPtrs.size === 1 && SCH.vb) {
+    const r = schSvg.getBoundingClientRect(), s = Math.min(r.width / SCH.vb.w, r.height / SCH.vb.h);
+    setSchVB({ ...SCH.vb, x: SCH.vb.x - (cur.x - prev.x) / s, y: SCH.vb.y - (cur.y - prev.y) / s });
+  } else if (schPtrs.size === 2) {
+    const other = [...schPtrs.entries()].find(([id]) => id !== e.pointerId)[1], a = Math.hypot(prev.x - other.x, prev.y - other.y), b = Math.hypot(cur.x - other.x, cur.y - other.y), r = schSvg.getBoundingClientRect();
+    if (a) schZoom(b / a, (cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top);
+  }
+  schPtrs.set(e.pointerId, cur);
+});
+schSvg.addEventListener("pointerup", e => { schPtrs.delete(e.pointerId); if (!schPtrs.size) setTimeout(() => { schMoved = false; }, 0); });
+schSvg.addEventListener("pointercancel", e => schPtrs.delete(e.pointerId));
+schSvg.addEventListener("click", e => { if (schMoved) { e.stopPropagation(); e.preventDefault(); } });
+
 // ===== app.js =====
 // ======================= app =======================
-const NS = "http://www.w3.org/2000/svg";
-const $ = s => document.querySelector(s);
-const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const LS = {
   get(k, d) { try { const v = localStorage.getItem("psn:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem("psn:" + k, JSON.stringify(v)); } catch (e) {} },
@@ -3147,35 +4373,43 @@ const DB = {
   async open() {
     if (this.db) return this.db;
     return this.db = await new Promise((res, rej) => {
-      try { const r = indexedDB.open("pcb-solder-nav", 1); r.onupgradeneeded = () => r.result.createObjectStore("boards", { keyPath: "key" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
-      catch (e) { rej(e); }
+      try {
+        const r = indexedDB.open("pcb-solder-nav", 3);
+        r.onupgradeneeded = () => {
+          if (!r.result.objectStoreNames.contains("boards")) r.result.createObjectStore("boards", { keyPath: "key" });
+          if (!r.result.objectStoreNames.contains("schematics")) r.result.createObjectStore("schematics", { keyPath: "key" });
+          if (!r.result.objectStoreNames.contains("schSources")) r.result.createObjectStore("schSources", { keyPath: "key" });
+        };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
     });
   },
-  async tx(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("boards", mode), s = t.objectStore("boards"); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); },
-  all() { return this.tx("readonly", s => s.getAll()).catch(() => []); },
-  put(b) { return this.tx("readwrite", s => s.put(b)).catch(() => {}); },
-  del(k) { return this.tx("readwrite", s => s.delete(k)).catch(() => {}); },
+  async tx(mode, fn, store = "boards") { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction(store, mode), s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); },
+  all(store = "boards") { return this.tx("readonly", s => s.getAll(), store).catch(() => []); },
+  get(k, store = "boards") { return this.tx("readonly", s => s.get(k), store).catch(() => null); },
+  put(b, store = "boards") { return this.tx("readwrite", s => s.put(b), store).catch(() => {}); },
+  del(k, store = "boards") { return this.tx("readwrite", s => s.delete(k), store).catch(() => {}); },
 };
 
 const S = { boards: [], b: null, side: "F", rot: 0, mode: "solder", lbl: LS.get("lbl", "ref"), trk: LS.get("trk", true), hideDone: LS.get("hideDone", false), sel: null, cur: null, pad: null, vb: null, q: "", netIdx: {}, worldEl: null, pm: {} };
 let doneAll = LS.get("done", {});
 const doneOf = () => (doneAll[S.b.key] ||= {});
-const saveDone = () => LS.set("done", doneAll);
+const saveDone = (key = S.b?.key) => { LS.set("done", doneAll); if (key) markDirty(key); };
 // progress changes can be undone (Ctrl+Z / U): snapshot the board's done map before each change
 const undoStack = [];
 function remember(label) { undoStack.push({ key: S.b.key, done: { ...doneOf() }, label }); if (undoStack.length > 30) undoStack.shift(); }
 function undo() {
   let u; while ((u = undoStack.pop()) && !S.boards.some(b => b.key === u.key));
   if (!u) { toast("没有可以撤销的操作"); return; }
-  doneAll[u.key] = u.done; saveDone();
+  doneAll[u.key] = u.done; saveDone(u.key);
   if (S.b.key !== u.key) openBoard(u.key); else { render(); renderList(); renderCard(); }
   toast("已撤销：" + u.label);
 }
 const undoAct = ["撤销", () => undo()];
 // power-up check ticks: { boardKey: { net: 1 } }
 let pwrAll = LS.get("pwr", {});
-const savePwr = () => LS.set("pwr", pwrAll);
-function dropProgress(k) { delete doneAll[k]; delete pwrAll[k]; saveDone(); savePwr(); }
+const savePwr = (key = S.b?.key) => { LS.set("pwr", pwrAll); if (key) markDirty(key); };
+function dropProgress(k) { delete doneAll[k]; delete pwrAll[k]; LS.set("done", doneAll); LS.set("pwr", pwrAll); }
 // a re-imported revision of a board keeps the ticks of designators that still exist
 function moveProgress(from, b) {
   if (from === b.key) return;
@@ -3226,22 +4460,24 @@ async function ingest(list) {
     b.key = boardKey(m, b);
     // same key, or the same board re-exported somewhere else (same name and source, mostly the same designators)
     const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source && sameDesign(x, b)));
-    if (old >= 0) { const o = S.boards[old]; if (o.key !== b.key) { DB.del(o.key); moveProgress(o.key, b); } S.boards[old] = b; } else S.boards.push(b);
-    DB.put(b); firstKey ||= b.key; added.push(b.key);
+    if (old >= 0) { const o = S.boards[old]; if (o.key !== b.key) { markDeleted(o.key); DB.del(o.key); moveProgress(o.key, b); } S.boards[old] = b; } else S.boards.push(b);
+    DB.put(b); markDirty(b.key); firstKey ||= b.key; added.push(b.key);
   }
   const newKeys = new Set(added);
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) {
     const heir = S.boards.find(x => newKeys.has(x.key) && !doneAll[x.key] && sameDesign(old, x));
-    DB.del(old.key); if (heir) moveProgress(old.key, heir); else dropProgress(old.key); S.boards = S.boards.filter(x => x !== old);
+    markDeleted(old.key); DB.del(old.key); if (heir) moveProgress(old.key, heir); else dropProgress(old.key); S.boards = S.boards.filter(x => x !== old);
   }
+  const schematicCount = ingestSchematics(res.schematics || [], roots);
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   S.flash = null;
   // import notes belong to the boards this import produced, so switching tabs shows the right ones
   for (const k of added) { const b = S.boards.find(x => x.key === k); if (b) { b.notes = msgs; DB.put(b); } }
   if (!firstKey) showNotes(msgs);
   const from = [...roots].join("、");
-  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
-  else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
+  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${schematicCount ? `、${schematicCount} 页原理图` : ""}${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  else if (schematicCount) { toast(`已加入 ${schematicCount} 页原理图${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showSchematics(); }
+  else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子或原理图文件", 8000);
 }
 function showNotes(msgs) {
   for (const id of ["#notes", "#notesEmpty"]) { const n = $(id); if (!n) continue; n.hidden = !msgs.length; n.innerHTML = msgs.length ? `<b>导入说明</b><ul>${msgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : ""; }
@@ -3820,16 +5056,118 @@ function twoStep(btn, fn) {
   if (armed && armed.btn === btn) { disarm(); fn(); return; }
   disarm(); armed = { btn, label: btn.textContent, t: setTimeout(disarm, 3000) }; btn.textContent = "再点一次确认";
 }
+
+// ---------- offline-first cloud sync ----------
+const syncMeta = LS.get("syncMeta", {});
+let syncTimer = null, syncing = false, syncAgain = false, lastSync = 0, syncError = "";
+function updateSyncUI() {
+  const c = Cloud.state(), btn = $("#syncBtn");
+  btn.classList.remove("online", "busy", "error");
+  let label = "本地保存", status = "板子、原理图和进度正在本机保存，离线也能使用。";
+  if (!c.configured) status += " 要跨设备查看，请配置 Supabase 并登录。";
+  else if (!c.email) { label = "登录云同步"; status = "云服务已配置。登录后，板子、原理图、进度和删除记录才会同步。"; }
+  else if (syncing) { label = "正在同步"; btn.classList.add("busy"); status = `正在同步 ${c.email} 的文档…`; }
+  else if (syncError) { label = "同步待重试"; btn.classList.add("error"); status = `已保留本机数据。同步失败：${syncError}`; }
+  else { label = "云端已同步"; btn.classList.add("online"); status = `${c.email} · 云端同步已开启${lastSync ? `，最近同步 ${new Date(lastSync).toLocaleTimeString()}` : ""}。`; }
+  $("#syncLabel").textContent = label; $("#cloudStatus").textContent = status;
+  $("#cloudLogin").hidden = !!c.email; $("#cloudSigned").hidden = !c.email;
+  $("#cloudAccount").textContent = c.email;
+}
+function persistSyncMeta() { LS.set("syncMeta", syncMeta); }
+function markDirty(k) {
+  if (k === "demo#builtin" || !syncDocument(k)) return;
+  syncMeta[k] = { ...syncMeta[k], updated: new Date().toISOString(), dirty: true, deleted: false };
+  persistSyncMeta(); scheduleSync();
+}
+function markDeleted(k) {
+  if (k === "demo#builtin") delete syncMeta[k];
+  else syncMeta[k] = { ...syncMeta[k], updated: new Date().toISOString(), dirty: true, deleted: true };
+  persistSyncMeta(); scheduleSync();
+}
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  if (Cloud.state().email) syncTimer = setTimeout(() => syncBoards(), 800);
+}
+function applyRemoteDocument(row) {
+  const isSch = !!row.payload?.schematic, previousVer = row.payload?.schematic?.ver;
+  const d = isSch ? normalizeSchematic(row.payload.schematic) : row.payload?.board;
+  if (!d || d.key !== row.board_key) return false;
+  if (isSch && (!Array.isArray(d.components) || !Array.isArray(d.shapes) || !Array.isArray(d.wires))) return false;
+  if (!isSch && d.ver !== IMPORT_VER) return false;
+  const list = isSch ? SCH.docs : S.boards, i = list.findIndex(x => x.key === d.key);
+  if (i >= 0) list[i] = d; else list.push(d);
+  if (!isSch) { doneAll[d.key] = row.payload.done || {}; pwrAll[d.key] = row.payload.pwr || {}; }
+  syncMeta[d.key] = { updated: row.updated_at, dirty: isSch && d.ver !== previousVer, deleted: false };
+  if (isSch) DB.del(d.key, "schSources");
+  DB.put(d, isSch ? "schematics" : "boards"); return true;
+}
+function syncDocument(k) { return SCH.docs.find(d => d.key === k) || S.boards.find(b => b.key === k); }
+async function syncBoards(manual = false) {
+  if (syncing) { syncAgain = true; return; }
+  if (!Cloud.state().email || navigator.onLine === false) { if (manual) toast("当前离线或尚未登录，数据已保存在本机"); updateSyncUI(); return; }
+  syncing = true; syncError = ""; updateSyncUI();
+  let changed = false;
+  try {
+    const rows = await Cloud.pull(), remote = new Map(rows.map(r => [r.board_key, r]));
+    for (const row of rows) {
+      const k = row.board_key, isSch = !!row.payload?.schematic || !row.payload?.board && k.startsWith("sch:"), local = syncDocument(k), m = syncMeta[k];
+      const rt = Date.parse(row.updated_at) || 0, lt = Date.parse(m?.updated || "") || local?.added || 0;
+      if (row.deleted) {
+        if (local && rt >= lt) {
+          if (isSch) { SCH.docs = SCH.docs.filter(d => d.key !== k); if (SCH.doc?.key === k) SCH.doc = null; }
+          else { S.boards = S.boards.filter(b => b.key !== k); dropProgress(k); }
+          DB.del(k, isSch ? "schematics" : "boards"); if (isSch) DB.del(k, "schSources"); changed = true;
+        }
+        if (!m?.dirty || rt >= lt) syncMeta[k] = { updated: row.updated_at, dirty: false, deleted: true };
+        continue;
+      }
+      if (!local && m?.deleted && lt >= rt) continue;
+      if (!local || rt > lt) changed = applyRemoteDocument(row) || changed;
+      else if (rt < lt && !m?.dirty) syncMeta[k] = { ...m, updated: new Date(lt).toISOString(), dirty: true, deleted: false };
+    }
+    for (const d of [...S.boards, ...SCH.docs]) {
+      if (d.key === "demo#builtin" || syncMeta[d.key]?.deleted) continue;
+      if (!syncMeta[d.key]) syncMeta[d.key] = { updated: new Date(d.added || Date.now()).toISOString(), dirty: true, deleted: false };
+      if (!remote.has(d.key)) syncMeta[d.key].dirty = true;
+    }
+    const out = [];
+    for (const d of [...S.boards, ...SCH.docs]) {
+      const m = syncMeta[d.key];
+      if (d.key === "demo#builtin" || !m?.dirty || m.deleted) continue;
+      const payload = d.kind === "schematic" ? { schematic: d } : { board: d, done: doneAll[d.key] || {}, pwr: pwrAll[d.key] || {} };
+      out.push({ board_key: d.key, payload, updated_at: m.updated, deleted: false });
+    }
+    for (const [k, m] of Object.entries(syncMeta)) if (m.dirty && m.deleted) out.push({ board_key: k, payload: null, updated_at: m.updated, deleted: true });
+    await Cloud.push(out);
+    for (const row of out) if (syncMeta[row.board_key]?.updated === row.updated_at) syncMeta[row.board_key].dirty = false;
+    LS.set("done", doneAll); LS.set("pwr", pwrAll); persistSyncMeta();
+    lastSync = Date.now();
+    if (manual) toast(`同步完成：${S.boards.filter(b => b.key !== "demo#builtin").length} 块板 · ${SCH.docs.length} 页原理图`);
+  } catch (e) { syncError = e.message || String(e); if (manual) toast("同步失败：" + syncError, 6000); }
+  finally {
+    syncing = false; updateSyncUI();
+    if (changed) {
+      const key = S.b?.key;
+      if (S.boards.length) { showApp(); openBoard(S.boards.some(b => b.key === key) ? key : S.boards[0].key); }
+      else showEmpty();
+      renderBoardList(); renderSchLibrary();
+      if ($("#schDialog").open) openSchematic(SCH.doc?.key);
+    }
+    if (syncAgain) { syncAgain = false; scheduleSync(); }
+  }
+}
+
 $("#resetProg").onclick = e => twoStep(e.currentTarget, () => { remember("清空进度"); doneAll[S.b.key] = {}; saveDone(); render(); renderList(); renderCard(); toast("已清空这块板的进度", 5000, undoAct); });
 $("#rmAll").onclick = e => twoStep(e.currentTarget, () => {
-  for (const b of S.boards) DB.del(b.key);
-  S.boards = []; doneAll = {}; pwrAll = {}; saveDone(); savePwr(); showNotes([]); showEmpty();
+  for (const b of S.boards) { markDeleted(b.key); DB.del(b.key); }
+  S.boards = []; doneAll = {}; pwrAll = {}; LS.set("done", doneAll); LS.set("pwr", pwrAll); showNotes([]); showEmpty(); renderBoardList();
 });
 function removeBoard(k) {
-  DB.del(k); S.boards = S.boards.filter(x => x.key !== k); dropProgress(k);
+  markDeleted(k); DB.del(k); S.boards = S.boards.filter(x => x.key !== k); dropProgress(k);
   if (!S.boards.length) showEmpty(); else if (!S.b || S.b.key === k) openBoard(S.boards[0].key); else renderTabs();
+  renderBoardList();
 }
-$("#rmBoard").onclick = e => twoStep(e.currentTarget, () => removeBoard(S.b.key));
+$("#rmBoard").onclick = e => twoStep(e.currentTarget, () => { if (S.b) { removeBoard(S.b.key); toast("已删除当前板"); } });
 // × on a tab: first click asks, second click deletes
 function delStep(el, key) {
   if (el.classList.contains("armed")) { removeBoard(key); toast("已删除这块板"); return; }
@@ -3837,9 +5175,55 @@ function delStep(el, key) {
   setTimeout(() => { if (el.isConnected) { el.classList.remove("armed"); el.textContent = "×"; el.title = "删除这块板"; } }, 3000);
 }
 
+// ---------- board manager and cloud dialog ----------
+function openDialog(id) { const d = $(id); if (!d.open) d.showModal(); }
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => $("#" + b.dataset.close).close());
+for (const d of document.querySelectorAll("dialog")) d.addEventListener("click", e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); } });
+function renderBoardList() {
+  const list = $("#boardList"); list.innerHTML = "";
+  if (!S.boards.length) { list.innerHTML = '<p>还没有板子。点下面“导入板子”开始。</p>'; return; }
+  for (const b of S.boards) {
+    const item = document.createElement("div"); item.className = "board-item" + (S.b?.key === b.key ? " current" : "");
+    const open = document.createElement("button"); open.type = "button"; open.className = "board-open";
+    const n = b.groups.reduce((a, g) => a + g.refs.length, 0), done = Object.keys(doneAll[b.key] || {}).length;
+    const name = document.createElement("b"), meta = document.createElement("span"); name.textContent = b.name; meta.textContent = `${b.sub || b.source} · ${done} / ${n} 已焊`;
+    open.append(name, meta); open.onclick = () => { openBoard(b.key); $("#boardsDialog").close(); };
+    const del = document.createElement("button"); del.type = "button"; del.className = "tbtn danger"; del.textContent = "删除";
+    del.onclick = () => twoStep(del, () => { removeBoard(b.key); toast(`已删除 ${b.name}`); });
+    item.append(open, del); list.appendChild(item);
+  }
+}
+function showBoards() { disarm(); renderBoardList(); openDialog("#boardsDialog"); }
+$("#boardsBtn").onclick = showBoards; $("#manageCurrent").onclick = showBoards;
+$("#managerAdd").onclick = () => { $("#boardsDialog").close(); $("#inFiles").click(); };
+$("#syncBtn").onclick = () => { const c = Cloud.state(); $("#cloudUrl").value = c.url || ""; $("#cloudKey").value = c.anonKey || ""; updateSyncUI(); openDialog("#cloudDialog"); };
+$("#saveCloud").onclick = () => {
+  try { Cloud.setConfig($("#cloudUrl").value, $("#cloudKey").value); syncError = ""; updateSyncUI(); toast("云服务设置已保存"); }
+  catch (e) { toast(e.message, 5000); }
+};
+$("#sendCode").onclick = async e => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try { const email = $("#cloudEmail").value; await Cloud.sendCode(email); $("#codeRow").hidden = false; $("#cloudCode").focus(); toast("验证码已发送，请查看邮箱"); }
+  catch (e2) { toast("发送失败：" + e2.message, 6000); }
+  finally { btn.disabled = false; }
+};
+$("#cloudSignIn").onclick = async e => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try { await Cloud.signIn($("#cloudEmail").value, $("#cloudCode").value); syncError = ""; updateSyncUI(); toast("登录成功，正在同步板子"); await syncBoards(true); }
+  catch (e2) { toast("登录失败：" + e2.message, 6000); }
+  finally { btn.disabled = false; }
+};
+$("#cloudCode").addEventListener("keydown", e => { if (e.key === "Enter") $("#cloudSignIn").click(); });
+$("#syncNow").onclick = () => syncBoards(true);
+$("#cloudSignOut").onclick = async () => { try { await Cloud.signOut(); } catch (e) {} lastSync = 0; syncError = ""; updateSyncUI(); toast("已退出云同步，本机板子仍然保留"); };
+window.addEventListener("online", scheduleSync);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSync(); });
+setInterval(scheduleSync, 60000);
+updateSyncUI();
+
 // ---------- keyboard ----------
 document.addEventListener("keydown", e => {
-  if (!S.b || e.target.matches("input, select, textarea")) return;
+  if (!S.b || document.querySelector("dialog[open]") || e.target.matches("input, select, textarea")) return;
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "Z") && !e.shiftKey) { e.preventDefault(); undo(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -3896,10 +5280,17 @@ function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#
 window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => setVB(S[P.key], P)); });
 
 (async () => {
-  let saved = await DB.all() || [];
+  const [boards, schematics] = await Promise.all([DB.all(), DB.all("schematics")]);
+  let saved = boards || [];
+  SCH.docs = (schematics || []).filter(d => d.key && d.kind === "schematic" && Array.isArray(d.components) && Array.isArray(d.shapes)).map(d => {
+    const oldVer = d.ver; d = normalizeSchematic(d);
+    if (d.ver !== oldVer) { DB.put(d, "schematics"); markDirty(d.key); }
+    return d;
+  }).sort((a, b) => (a.added || 0) - (b.added || 0));
+  renderSchLibrary();
   const stale = saved.filter(b => b.ver !== IMPORT_VER);
   if (stale.length) {
-    for (const b of stale) DB.del(b.key);
+    for (const b of stale) { markDeleted(b.key); DB.del(b.key); }
     saved = saved.filter(b => b.ver === IMPORT_VER);
     const names = stale.filter(b => b.key !== "demo#builtin").map(b => b.name);
     if (names.length) S.flash = ([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
@@ -3911,6 +5302,7 @@ window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => s
     // first visit: open the built-in example so the page shows what it does
     $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的工程文件夹或生产文件。", 5000);
   }
+  scheduleSync();
 })();
 
 </script>

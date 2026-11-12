@@ -28,6 +28,31 @@
 
 **iPad / iPhone**：Safari 不能选文件夹。点“＋ 添加”直接选 zip 或 rar；要传整个文件夹，先在“文件”App 里长按文件夹 → “压缩”。
 
+## AD 原理图库
+
+右上角“原理图库”支持导入二进制或 ASCII `.SchDoc`，也可直接拖入 zip / rar 工程包。读取嵌入的器件符号、位号、参数、引脚、导线、网络标号和注释；不需要另找 `.SchLib`。支持“内容”聚焦和“全页”缩放、器件与网络搜索、点击详情、文字/网格开关。
+
+**AD 格式输出**：“导出 SchLib”生成原生 OLE2 `.SchLib`，包含独立符号数据流、二进制引脚、中文参数和多单元器件；“原始 SchDoc”下载字节不变的原始 AD 图纸，不是改扩展名或 SVG。原始 SchDoc 仅保存在本机、不会上传，其他设备需重新导入原件才能下载；同步后的解析数据仍可生成 SchLib。
+
+原理图独立保存和删除，不与 PCB 焊接清单混在一起。登录云同步后也能在其他设备打开。网络连通性按导线、节点和同名标号推导，仅供参考，不能替代 Altium 的 ERC / 编译结果；原文件未指定封装的器件保持未指定，不会自动猜填。常用矢量图元可直接显示，嵌入图片暂不显示；此功能只读，不回写原始 `.SchDoc`。SchLib 保留封装名称；如果电脑里没有对应的 `.PcbLib`，仍需在 AD 中匹配封装库。
+
+## 板子管理、备份与跨设备同步
+
+板子、原理图和焊接进度始终先保存到本机 IndexedDB / localStorage，断网也能导入、删除和勾选进度。点右上角“板子管理”可以切换、删除当前板或清空全部板子；“原理图库”可以导入、查看和单独删除 AD `.SchDoc` 图纸；删除需要再次确认。
+
+GitHub Pages 是静态托管，跨设备同步需要部署者配置一次 Supabase（免费额度即可）：
+
+1. 在 [Supabase](https://supabase.com/) 创建项目，打开 **SQL Editor**，执行本项目的 [`supabase.sql`](supabase.sql)。脚本会创建数据表和行级安全策略，每个登录账号只能读写自己的数据。
+2. 在 **Authentication → Sign In / Providers** 中启用 Email。网站右上角“本地保存 / 登录云同步”使用邮箱验证码登录，不需要密码。
+3. 打开网页的“存储与云同步 → 云服务设置”，填写 **Project URL** 和 **anon public key**。不要填写 `service_role` key。
+4. 若要让所有访客免填配置，部署者在 `src/shell.html` 的模块脚本前加入以下配置（anon key 本来就是可公开的客户端 key，数据隔离由行级安全策略保证），再运行 `node build.js`：
+
+```html
+<script>globalThis.PSN_CLOUD_CONFIG = { url: "https://你的项目.supabase.co", anonKey: "你的 anon public key" };</script>
+```
+
+登录后会自动同步板子、原理图、焊接进度和删除记录；断网期间的修改会保留在本机，恢复网络后补传。其他设备使用相同云服务和账号登录即可看到相同内容。同步采用每份文档“最后修改优先”的冲突规则，不建议多台设备同时修改同一块板。原理图复用 `psn_boards` 表的 `payload.schematic` 字段，已有 Supabase 表不需要修改。
+
 ## 支持的文件
 
 | EDA | 直接读 | 也可以用 |
@@ -35,11 +60,11 @@
 | KiCad 6 ~ 10 | `.kicad_pcb` | IPC-2581、ODB++、Gerber 套件 |
 | 嘉立创EDA 专业版 | 工程 `.epro` / `.epro2`，备份 `.epru`（含封装）；一个工程多块板会分开显示 | 嘉立创 Gerber 包（自带 `FlyingProbeTesting.json` 网表） |
 | 嘉立创EDA 标准版 | PCB 源文件 `.json` | Gerber 套件 |
-| Altium Designer | `.PcbDoc`（二进制和 ASCII 都行，包括嘉立创导出的 AD 文件） | IPC-2581、ODB++、Gerber + Pick Place + IPC-356 |
-| Cadence Allegro / OrCAD | IPC-2581（File → Export → IPC 2581） | Gerber/`.art` + 坐标 + IPC-356（File → Export → IPC 356） |
+| Altium Designer | `.PcbDoc`（二进制和 ASCII）；`.SchDoc` 在“原理图库”查看 | IPC-2581、ODB++、Gerber + Pick Place + IPC-356 |
+| Cadence Allegro / OrCAD | `.brd`（Allegro 16.0 以后的格式；旁边的 OrCAD 原理图 `.DSN` 自动忽略） | IPC-2581（File → Export → IPC 2581）；Gerber/`.art` + 坐标 + IPC-356（File → Export → IPC 356） |
 | PADS、Xpedition 等 | IPC-2581、ODB++ | Gerber 套件 |
 
-`.brd`（Allegro 原文件）是加密的二进制格式，浏览器里读不了，请导出 IPC-2581。嘉立创本地工程库 `.eprj2` 也请先导出成 `.epro2`。
+Allegro `.brd` 直接读出器件、焊盘（形状、尺寸、钻孔）、引脚号、网络、器件值、板框、走线、过孔和丝印外框。实测过 16.6 / 17.4 / 18.1 / 19.0 格式的板子，其他 16.x / 17.x 格式按同样的结构读，页面会提醒核对；Allegro 16.0 以前的老文件或读不出来的文件，页面会写明文件版本，请改用 IPC-2581。Eagle 的 `.brd` 请先用 KiCad 打开另存为 `.kicad_pcb`。嘉立创本地工程库 `.eprj2` 也请先导出成 `.epro2`。
 
 **Gerber 套件** = Gerber + 钻孔 + 坐标文件（Pick and Place / CPL）。再加一个 IPC-356 网表或嘉立创飞针文件，就有引脚号和网络；没有网表时，焊盘按“中心对称 + 封装尺寸”归到器件，测引脚不可用，页面会提示。坐标文件和 Gerber 的原点、单位（mm / mil / inch）、Y 方向不一致时会自动对齐。
 
@@ -56,6 +81,7 @@
 | ODB++（KiCad 导出） | pcbnew | ≤ 0.012 mm（导出文件只保留 2 位小数） |
 | 嘉立创EDA 专业版 | Allegro 原设计；嘉立创自己的飞针文件 | 0 偏差；底面 0/90/180/270° 全部正确 |
 | Altium `.PcbDoc` | KiCad 的 Altium 导入器（5 块板） | ≤ 0.0014 mm，网络、器件值一致 |
+| Allegro `.brd` | 文件里 Allegro 自己存的每个焊盘的板上外框；Allegro 导出的 `.alg` | 7 块板（16.6 / 17.4 / 18.1 / 19.0 格式）1601 个焊盘 ≤ 0.001 mm，含底面和 45° 旋转；网络与 `.alg` 一致 |
 | 嘉立创EDA 标准版 | 走线端点自洽检查 | 184 个走线端点全部落在同网络焊盘上 |
 | Gerber + 坐标 + IPC-356 | Allegro IPC-2581 | 350 个焊盘 0 偏差，引脚号和网络一致 |
 
@@ -86,20 +112,27 @@
 
 ## 隐私
 
-所有文件只在浏览器本地解析。读入的板子和勾选进度保存在当前浏览器的 IndexedDB / localStorage 里，不上传任何服务器。页面只从 Google Fonts 加载字体，而且不等它：连不上 Google 时直接用系统字体，页面照常打开。
+所有原始文件只在浏览器本地解析。默认情况下，读入的板子、原理图和勾选进度只保存在当前浏览器的 IndexedDB / localStorage 里；只有用户主动配置并登录云同步后，解析后的板图、原理图、器件、进度和删除记录才会通过 HTTPS 保存到其 Supabase 项目，原始 PCB / SchDoc / Gerber / 压缩包不会上传。页面只从 Google Fonts 加载字体，而且不等它：连不上 Google 时直接用系统字体，页面照常打开。
 
 ## 开发
 
 源码在 `src/`，`node build.js` 把它们打包成单文件 `index.html`（没有依赖）。
 
 ```
-src/core/      geom 几何、files 解压(zip/tar/gzip/.Z)/XML/CSV/XLSX、rar RAR5 解压、tables BOM/坐标/IPC-356/飞针、project 文件归组
-src/import/    kicad、ipc2581、easyeda、altium、odb、gerber(含 Excellon)、fab(Gerber 套件拼装)
+src/core/      dom 公共界面工具、geom 几何、files 解压、rar RAR5 解压、tables 表格/网表、project 文件归组
+src/import/    kicad、ipc2581、easyeda、altium、altium_sch、allegro、odb、gerber、fab
+src/schematic.js  AD 原理图库、图纸交互与 AD 文件下载
+src/export/    altium_schlib 原生 OLE2 / SchLib 和二进制引脚写入
 src/enrich.js  焊接分步、极性、分组
-src/app.js     界面
+src/cloud.js   Supabase 登录与 REST 同步（无外部依赖）
+src/app.js     界面、本地存储与同步合并
 ```
 
-解析模块不依赖 DOM，可以直接在 Node（≥ 18）里跑；`test/` 里是对照测试脚本，需要本地样本数据（不在仓库里）。
+解析模块不依赖 DOM，可以直接在 Node（≥ 18）里跑；`test/` 里是对照测试脚本，其中 `run_all.js` 需要本地样本数据（不在仓库里）。`node test/cloud.js` 可直接验证云端 API 协议；`test/browser_sync.js` 使用 Chrome DevTools Protocol 验证真实导入和模拟双设备同步。
+
+Allegro 测试需要本地样本：`ALLEGRO_BRD=/样本.brd ALLEGRO_ZIP=/样本.zip ALLEGRO_SVG=/输出.svg node test/allegro.js`，`ALLEGRO_EXTRA=/a.brd:/b.brd` 可再加几块板做对照。
+
+AD 原理图测试需要本地样本：`SCH_SAMPLES=/样本目录 node test/altium_sch.js` 验证三页解析；`SCH_RAR=/样本.rar node test/schlib_export.js` 验证原生 SchLib、二进制引脚和中文参数；在 9223 端口打开测试 Chrome 后，运行 `SCH_RAR=/样本.rar node test/browser_schematic.js` 验证真实 RAR 导入、看图、SchLib 导出、原始 SchDoc 下载、刷新、同步和删除。
 
 ## 许可
 

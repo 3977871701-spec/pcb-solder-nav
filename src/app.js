@@ -1,8 +1,4 @@
 // ======================= app =======================
-const NS = "http://www.w3.org/2000/svg";
-const $ = s => document.querySelector(s);
-const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const LS = {
   get(k, d) { try { const v = localStorage.getItem("psn:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem("psn:" + k, JSON.stringify(v)); } catch (e) {} },
@@ -26,35 +22,43 @@ const DB = {
   async open() {
     if (this.db) return this.db;
     return this.db = await new Promise((res, rej) => {
-      try { const r = indexedDB.open("pcb-solder-nav", 1); r.onupgradeneeded = () => r.result.createObjectStore("boards", { keyPath: "key" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
-      catch (e) { rej(e); }
+      try {
+        const r = indexedDB.open("pcb-solder-nav", 3);
+        r.onupgradeneeded = () => {
+          if (!r.result.objectStoreNames.contains("boards")) r.result.createObjectStore("boards", { keyPath: "key" });
+          if (!r.result.objectStoreNames.contains("schematics")) r.result.createObjectStore("schematics", { keyPath: "key" });
+          if (!r.result.objectStoreNames.contains("schSources")) r.result.createObjectStore("schSources", { keyPath: "key" });
+        };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
     });
   },
-  async tx(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("boards", mode), s = t.objectStore("boards"); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); },
-  all() { return this.tx("readonly", s => s.getAll()).catch(() => []); },
-  put(b) { return this.tx("readwrite", s => s.put(b)).catch(() => {}); },
-  del(k) { return this.tx("readwrite", s => s.delete(k)).catch(() => {}); },
+  async tx(mode, fn, store = "boards") { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction(store, mode), s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); },
+  all(store = "boards") { return this.tx("readonly", s => s.getAll(), store).catch(() => []); },
+  get(k, store = "boards") { return this.tx("readonly", s => s.get(k), store).catch(() => null); },
+  put(b, store = "boards") { return this.tx("readwrite", s => s.put(b), store).catch(() => {}); },
+  del(k, store = "boards") { return this.tx("readwrite", s => s.delete(k), store).catch(() => {}); },
 };
 
 const S = { boards: [], b: null, side: "F", rot: 0, mode: "solder", lbl: LS.get("lbl", "ref"), trk: LS.get("trk", true), hideDone: LS.get("hideDone", false), sel: null, cur: null, pad: null, vb: null, q: "", netIdx: {}, worldEl: null, pm: {} };
 let doneAll = LS.get("done", {});
 const doneOf = () => (doneAll[S.b.key] ||= {});
-const saveDone = () => LS.set("done", doneAll);
+const saveDone = (key = S.b?.key) => { LS.set("done", doneAll); if (key) markDirty(key); };
 // progress changes can be undone (Ctrl+Z / U): snapshot the board's done map before each change
 const undoStack = [];
 function remember(label) { undoStack.push({ key: S.b.key, done: { ...doneOf() }, label }); if (undoStack.length > 30) undoStack.shift(); }
 function undo() {
   let u; while ((u = undoStack.pop()) && !S.boards.some(b => b.key === u.key));
   if (!u) { toast("没有可以撤销的操作"); return; }
-  doneAll[u.key] = u.done; saveDone();
+  doneAll[u.key] = u.done; saveDone(u.key);
   if (S.b.key !== u.key) openBoard(u.key); else { render(); renderList(); renderCard(); }
   toast("已撤销：" + u.label);
 }
 const undoAct = ["撤销", () => undo()];
 // power-up check ticks: { boardKey: { net: 1 } }
 let pwrAll = LS.get("pwr", {});
-const savePwr = () => LS.set("pwr", pwrAll);
-function dropProgress(k) { delete doneAll[k]; delete pwrAll[k]; saveDone(); savePwr(); }
+const savePwr = (key = S.b?.key) => { LS.set("pwr", pwrAll); if (key) markDirty(key); };
+function dropProgress(k) { delete doneAll[k]; delete pwrAll[k]; LS.set("done", doneAll); LS.set("pwr", pwrAll); }
 // a re-imported revision of a board keeps the ticks of designators that still exist
 function moveProgress(from, b) {
   if (from === b.key) return;
@@ -105,22 +109,24 @@ async function ingest(list) {
     b.key = boardKey(m, b);
     // same key, or the same board re-exported somewhere else (same name and source, mostly the same designators)
     const old = S.boards.findIndex(x => x.key === b.key || (x.name === b.name && x.source === b.source && sameDesign(x, b)));
-    if (old >= 0) { const o = S.boards[old]; if (o.key !== b.key) { DB.del(o.key); moveProgress(o.key, b); } S.boards[old] = b; } else S.boards.push(b);
-    DB.put(b); firstKey ||= b.key; added.push(b.key);
+    if (old >= 0) { const o = S.boards[old]; if (o.key !== b.key) { markDeleted(o.key); DB.del(o.key); moveProgress(o.key, b); } S.boards[old] = b; } else S.boards.push(b);
+    DB.put(b); markDirty(b.key); firstKey ||= b.key; added.push(b.key);
   }
   const newKeys = new Set(added);
   if (added.length) for (const old of S.boards.filter(x => [...roots].some(r => x.key.startsWith(r + "/")) && !newKeys.has(x.key))) {
     const heir = S.boards.find(x => newKeys.has(x.key) && !doneAll[x.key] && sameDesign(old, x));
-    DB.del(old.key); if (heir) moveProgress(old.key, heir); else dropProgress(old.key); S.boards = S.boards.filter(x => x !== old);
+    markDeleted(old.key); DB.del(old.key); if (heir) moveProgress(old.key, heir); else dropProgress(old.key); S.boards = S.boards.filter(x => x !== old);
   }
+  const schematicCount = ingestSchematics(res.schematics || [], roots);
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   S.flash = null;
   // import notes belong to the boards this import produced, so switching tabs shows the right ones
   for (const k of added) { const b = S.boards.find(x => x.key === k); if (b) { b.notes = msgs; DB.put(b); } }
   if (!firstKey) showNotes(msgs);
   const from = [...roots].join("、");
-  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
-  else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子文件", 8000);
+  if (firstKey) { toast(`${from ? "从 " + from + " " : ""}读入 ${added.length} 块板${schematicCount ? `、${schematicCount} 页原理图` : ""}${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showApp(); openBoard(firstKey); }
+  else if (schematicCount) { toast(`已加入 ${schematicCount} 页原理图${msgs.length ? "，有 " + msgs.length + " 条说明" : ""}`); showSchematics(); }
+  else toast(msgs.length ? msgs.slice(0, 3).join("\n") : "没有找到能识别的板子或原理图文件", 8000);
 }
 function showNotes(msgs) {
   for (const id of ["#notes", "#notesEmpty"]) { const n = $(id); if (!n) continue; n.hidden = !msgs.length; n.innerHTML = msgs.length ? `<b>导入说明</b><ul>${msgs.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : ""; }
@@ -699,16 +705,118 @@ function twoStep(btn, fn) {
   if (armed && armed.btn === btn) { disarm(); fn(); return; }
   disarm(); armed = { btn, label: btn.textContent, t: setTimeout(disarm, 3000) }; btn.textContent = "再点一次确认";
 }
+
+// ---------- offline-first cloud sync ----------
+const syncMeta = LS.get("syncMeta", {});
+let syncTimer = null, syncing = false, syncAgain = false, lastSync = 0, syncError = "";
+function updateSyncUI() {
+  const c = Cloud.state(), btn = $("#syncBtn");
+  btn.classList.remove("online", "busy", "error");
+  let label = "本地保存", status = "板子、原理图和进度正在本机保存，离线也能使用。";
+  if (!c.configured) status += " 要跨设备查看，请配置 Supabase 并登录。";
+  else if (!c.email) { label = "登录云同步"; status = "云服务已配置。登录后，板子、原理图、进度和删除记录才会同步。"; }
+  else if (syncing) { label = "正在同步"; btn.classList.add("busy"); status = `正在同步 ${c.email} 的文档…`; }
+  else if (syncError) { label = "同步待重试"; btn.classList.add("error"); status = `已保留本机数据。同步失败：${syncError}`; }
+  else { label = "云端已同步"; btn.classList.add("online"); status = `${c.email} · 云端同步已开启${lastSync ? `，最近同步 ${new Date(lastSync).toLocaleTimeString()}` : ""}。`; }
+  $("#syncLabel").textContent = label; $("#cloudStatus").textContent = status;
+  $("#cloudLogin").hidden = !!c.email; $("#cloudSigned").hidden = !c.email;
+  $("#cloudAccount").textContent = c.email;
+}
+function persistSyncMeta() { LS.set("syncMeta", syncMeta); }
+function markDirty(k) {
+  if (k === "demo#builtin" || !syncDocument(k)) return;
+  syncMeta[k] = { ...syncMeta[k], updated: new Date().toISOString(), dirty: true, deleted: false };
+  persistSyncMeta(); scheduleSync();
+}
+function markDeleted(k) {
+  if (k === "demo#builtin") delete syncMeta[k];
+  else syncMeta[k] = { ...syncMeta[k], updated: new Date().toISOString(), dirty: true, deleted: true };
+  persistSyncMeta(); scheduleSync();
+}
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  if (Cloud.state().email) syncTimer = setTimeout(() => syncBoards(), 800);
+}
+function applyRemoteDocument(row) {
+  const isSch = !!row.payload?.schematic, previousVer = row.payload?.schematic?.ver;
+  const d = isSch ? normalizeSchematic(row.payload.schematic) : row.payload?.board;
+  if (!d || d.key !== row.board_key) return false;
+  if (isSch && (!Array.isArray(d.components) || !Array.isArray(d.shapes) || !Array.isArray(d.wires))) return false;
+  if (!isSch && d.ver !== IMPORT_VER) return false;
+  const list = isSch ? SCH.docs : S.boards, i = list.findIndex(x => x.key === d.key);
+  if (i >= 0) list[i] = d; else list.push(d);
+  if (!isSch) { doneAll[d.key] = row.payload.done || {}; pwrAll[d.key] = row.payload.pwr || {}; }
+  syncMeta[d.key] = { updated: row.updated_at, dirty: isSch && d.ver !== previousVer, deleted: false };
+  if (isSch) DB.del(d.key, "schSources");
+  DB.put(d, isSch ? "schematics" : "boards"); return true;
+}
+function syncDocument(k) { return SCH.docs.find(d => d.key === k) || S.boards.find(b => b.key === k); }
+async function syncBoards(manual = false) {
+  if (syncing) { syncAgain = true; return; }
+  if (!Cloud.state().email || navigator.onLine === false) { if (manual) toast("当前离线或尚未登录，数据已保存在本机"); updateSyncUI(); return; }
+  syncing = true; syncError = ""; updateSyncUI();
+  let changed = false;
+  try {
+    const rows = await Cloud.pull(), remote = new Map(rows.map(r => [r.board_key, r]));
+    for (const row of rows) {
+      const k = row.board_key, isSch = !!row.payload?.schematic || !row.payload?.board && k.startsWith("sch:"), local = syncDocument(k), m = syncMeta[k];
+      const rt = Date.parse(row.updated_at) || 0, lt = Date.parse(m?.updated || "") || local?.added || 0;
+      if (row.deleted) {
+        if (local && rt >= lt) {
+          if (isSch) { SCH.docs = SCH.docs.filter(d => d.key !== k); if (SCH.doc?.key === k) SCH.doc = null; }
+          else { S.boards = S.boards.filter(b => b.key !== k); dropProgress(k); }
+          DB.del(k, isSch ? "schematics" : "boards"); if (isSch) DB.del(k, "schSources"); changed = true;
+        }
+        if (!m?.dirty || rt >= lt) syncMeta[k] = { updated: row.updated_at, dirty: false, deleted: true };
+        continue;
+      }
+      if (!local && m?.deleted && lt >= rt) continue;
+      if (!local || rt > lt) changed = applyRemoteDocument(row) || changed;
+      else if (rt < lt && !m?.dirty) syncMeta[k] = { ...m, updated: new Date(lt).toISOString(), dirty: true, deleted: false };
+    }
+    for (const d of [...S.boards, ...SCH.docs]) {
+      if (d.key === "demo#builtin" || syncMeta[d.key]?.deleted) continue;
+      if (!syncMeta[d.key]) syncMeta[d.key] = { updated: new Date(d.added || Date.now()).toISOString(), dirty: true, deleted: false };
+      if (!remote.has(d.key)) syncMeta[d.key].dirty = true;
+    }
+    const out = [];
+    for (const d of [...S.boards, ...SCH.docs]) {
+      const m = syncMeta[d.key];
+      if (d.key === "demo#builtin" || !m?.dirty || m.deleted) continue;
+      const payload = d.kind === "schematic" ? { schematic: d } : { board: d, done: doneAll[d.key] || {}, pwr: pwrAll[d.key] || {} };
+      out.push({ board_key: d.key, payload, updated_at: m.updated, deleted: false });
+    }
+    for (const [k, m] of Object.entries(syncMeta)) if (m.dirty && m.deleted) out.push({ board_key: k, payload: null, updated_at: m.updated, deleted: true });
+    await Cloud.push(out);
+    for (const row of out) if (syncMeta[row.board_key]?.updated === row.updated_at) syncMeta[row.board_key].dirty = false;
+    LS.set("done", doneAll); LS.set("pwr", pwrAll); persistSyncMeta();
+    lastSync = Date.now();
+    if (manual) toast(`同步完成：${S.boards.filter(b => b.key !== "demo#builtin").length} 块板 · ${SCH.docs.length} 页原理图`);
+  } catch (e) { syncError = e.message || String(e); if (manual) toast("同步失败：" + syncError, 6000); }
+  finally {
+    syncing = false; updateSyncUI();
+    if (changed) {
+      const key = S.b?.key;
+      if (S.boards.length) { showApp(); openBoard(S.boards.some(b => b.key === key) ? key : S.boards[0].key); }
+      else showEmpty();
+      renderBoardList(); renderSchLibrary();
+      if ($("#schDialog").open) openSchematic(SCH.doc?.key);
+    }
+    if (syncAgain) { syncAgain = false; scheduleSync(); }
+  }
+}
+
 $("#resetProg").onclick = e => twoStep(e.currentTarget, () => { remember("清空进度"); doneAll[S.b.key] = {}; saveDone(); render(); renderList(); renderCard(); toast("已清空这块板的进度", 5000, undoAct); });
 $("#rmAll").onclick = e => twoStep(e.currentTarget, () => {
-  for (const b of S.boards) DB.del(b.key);
-  S.boards = []; doneAll = {}; pwrAll = {}; saveDone(); savePwr(); showNotes([]); showEmpty();
+  for (const b of S.boards) { markDeleted(b.key); DB.del(b.key); }
+  S.boards = []; doneAll = {}; pwrAll = {}; LS.set("done", doneAll); LS.set("pwr", pwrAll); showNotes([]); showEmpty(); renderBoardList();
 });
 function removeBoard(k) {
-  DB.del(k); S.boards = S.boards.filter(x => x.key !== k); dropProgress(k);
+  markDeleted(k); DB.del(k); S.boards = S.boards.filter(x => x.key !== k); dropProgress(k);
   if (!S.boards.length) showEmpty(); else if (!S.b || S.b.key === k) openBoard(S.boards[0].key); else renderTabs();
+  renderBoardList();
 }
-$("#rmBoard").onclick = e => twoStep(e.currentTarget, () => removeBoard(S.b.key));
+$("#rmBoard").onclick = e => twoStep(e.currentTarget, () => { if (S.b) { removeBoard(S.b.key); toast("已删除当前板"); } });
 // × on a tab: first click asks, second click deletes
 function delStep(el, key) {
   if (el.classList.contains("armed")) { removeBoard(key); toast("已删除这块板"); return; }
@@ -716,9 +824,55 @@ function delStep(el, key) {
   setTimeout(() => { if (el.isConnected) { el.classList.remove("armed"); el.textContent = "×"; el.title = "删除这块板"; } }, 3000);
 }
 
+// ---------- board manager and cloud dialog ----------
+function openDialog(id) { const d = $(id); if (!d.open) d.showModal(); }
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => $("#" + b.dataset.close).close());
+for (const d of document.querySelectorAll("dialog")) d.addEventListener("click", e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); } });
+function renderBoardList() {
+  const list = $("#boardList"); list.innerHTML = "";
+  if (!S.boards.length) { list.innerHTML = '<p>还没有板子。点下面“导入板子”开始。</p>'; return; }
+  for (const b of S.boards) {
+    const item = document.createElement("div"); item.className = "board-item" + (S.b?.key === b.key ? " current" : "");
+    const open = document.createElement("button"); open.type = "button"; open.className = "board-open";
+    const n = b.groups.reduce((a, g) => a + g.refs.length, 0), done = Object.keys(doneAll[b.key] || {}).length;
+    const name = document.createElement("b"), meta = document.createElement("span"); name.textContent = b.name; meta.textContent = `${b.sub || b.source} · ${done} / ${n} 已焊`;
+    open.append(name, meta); open.onclick = () => { openBoard(b.key); $("#boardsDialog").close(); };
+    const del = document.createElement("button"); del.type = "button"; del.className = "tbtn danger"; del.textContent = "删除";
+    del.onclick = () => twoStep(del, () => { removeBoard(b.key); toast(`已删除 ${b.name}`); });
+    item.append(open, del); list.appendChild(item);
+  }
+}
+function showBoards() { disarm(); renderBoardList(); openDialog("#boardsDialog"); }
+$("#boardsBtn").onclick = showBoards; $("#manageCurrent").onclick = showBoards;
+$("#managerAdd").onclick = () => { $("#boardsDialog").close(); $("#inFiles").click(); };
+$("#syncBtn").onclick = () => { const c = Cloud.state(); $("#cloudUrl").value = c.url || ""; $("#cloudKey").value = c.anonKey || ""; updateSyncUI(); openDialog("#cloudDialog"); };
+$("#saveCloud").onclick = () => {
+  try { Cloud.setConfig($("#cloudUrl").value, $("#cloudKey").value); syncError = ""; updateSyncUI(); toast("云服务设置已保存"); }
+  catch (e) { toast(e.message, 5000); }
+};
+$("#sendCode").onclick = async e => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try { const email = $("#cloudEmail").value; await Cloud.sendCode(email); $("#codeRow").hidden = false; $("#cloudCode").focus(); toast("验证码已发送，请查看邮箱"); }
+  catch (e2) { toast("发送失败：" + e2.message, 6000); }
+  finally { btn.disabled = false; }
+};
+$("#cloudSignIn").onclick = async e => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try { await Cloud.signIn($("#cloudEmail").value, $("#cloudCode").value); syncError = ""; updateSyncUI(); toast("登录成功，正在同步板子"); await syncBoards(true); }
+  catch (e2) { toast("登录失败：" + e2.message, 6000); }
+  finally { btn.disabled = false; }
+};
+$("#cloudCode").addEventListener("keydown", e => { if (e.key === "Enter") $("#cloudSignIn").click(); });
+$("#syncNow").onclick = () => syncBoards(true);
+$("#cloudSignOut").onclick = async () => { try { await Cloud.signOut(); } catch (e) {} lastSync = 0; syncError = ""; updateSyncUI(); toast("已退出云同步，本机板子仍然保留"); };
+window.addEventListener("online", scheduleSync);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSync(); });
+setInterval(scheduleSync, 60000);
+updateSyncUI();
+
 // ---------- keyboard ----------
 document.addEventListener("keydown", e => {
-  if (!S.b || e.target.matches("input, select, textarea")) return;
+  if (!S.b || document.querySelector("dialog[open]") || e.target.matches("input, select, textarea")) return;
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "Z") && !e.shiftKey) { e.preventDefault(); undo(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -775,10 +929,17 @@ function showEmpty() { $("#empty").hidden = false; $("#app").hidden = true; $("#
 window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => setVB(S[P.key], P)); });
 
 (async () => {
-  let saved = await DB.all() || [];
+  const [boards, schematics] = await Promise.all([DB.all(), DB.all("schematics")]);
+  let saved = boards || [];
+  SCH.docs = (schematics || []).filter(d => d.key && d.kind === "schematic" && Array.isArray(d.components) && Array.isArray(d.shapes)).map(d => {
+    const oldVer = d.ver; d = normalizeSchematic(d);
+    if (d.ver !== oldVer) { DB.put(d, "schematics"); markDirty(d.key); }
+    return d;
+  }).sort((a, b) => (a.added || 0) - (b.added || 0));
+  renderSchLibrary();
   const stale = saved.filter(b => b.ver !== IMPORT_VER);
   if (stale.length) {
-    for (const b of stale) DB.del(b.key);
+    for (const b of stale) { markDeleted(b.key); DB.del(b.key); }
     saved = saved.filter(b => b.ver === IMPORT_VER);
     const names = stale.filter(b => b.key !== "demo#builtin").map(b => b.name);
     if (names.length) S.flash = ([`· 之前用旧版本读入的 ${names.length} 块板（${names.slice(0, 8).join("、")}${names.length > 8 ? " 等" : ""}）已移除：导入规则更新了，旧结果可能不对。请点“＋ 添加”重新选择原来的文件夹。`]);
@@ -790,4 +951,5 @@ window.addEventListener("resize", () => { if (S.b) visiblePanes().forEach(P => s
     // first visit: open the built-in example so the page shows what it does
     $("#loadDemo").click(); toast("这是示例板。点右上角“＋ 添加”读入你自己的工程文件夹或生产文件。", 5000);
   }
+  scheduleSync();
 })();

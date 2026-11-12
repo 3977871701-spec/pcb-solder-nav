@@ -46,16 +46,20 @@ globalThis.ImpAltium = (() => {
   }
 
   // ---------- record readers ----------
-  const latin = new TextDecoder("windows-1252");
+  const latin = new TextDecoder("windows-1252"), legacy = new TextDecoder("gb18030");
   function propsRecords(u8) {
     const out = [], dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); let p = 0;
     while (p + 4 <= u8.length) {
       let len = dv.getUint32(p, true); p += 4; len &= 0x00ffffff; if (p + len > u8.length) break;
       const raw = u8.subarray(p, p + len); p += len;
-      let s = latin.decode(raw).replace(/\0+$/, "");
-      const o = {};
-      for (const kv of s.split("|")) { const i = kv.indexOf("="); if (i > 0) o[kv.slice(0, i).trim().toUpperCase()] = kv.slice(i + 1); }
-      for (const k of Object.keys(o)) if (k.startsWith("%UTF8%")) { try { o[k.slice(6)] = new TextDecoder().decode(Uint8Array.from(o[k], c => c.charCodeAt(0) & 255)); } catch (e) {} }
+      const s = Array.from(raw, b => String.fromCharCode(b)).join("").replace(/\0+$/, ""), o = {}, bytes = {};
+      for (const kv of s.split("|")) {
+        const i = kv.indexOf("="); if (i <= 0) continue;
+        const k = kv.slice(0, i).trim().toUpperCase(), value = kv.slice(i + 1);
+        bytes[k] = Uint8Array.from(value, c => c.charCodeAt(0) & 255);
+        if (k.startsWith("%UTF8%")) o[k.slice(6)] = new TextDecoder().decode(bytes[k]);
+        else if (!(("%UTF8%" + k) in bytes)) o[k] = /[^\x00-\x7f]/.test(value) ? legacy.decode(bytes[k]) : value;
+      }
       out.push(o);
     }
     return out;

@@ -36,19 +36,26 @@ globalThis.Project = (() => {
     if (e.error) return { kind: "error" };
     if (x === "kicad_pcb") return { kind: "kicad" };
     if (x === "pcbdoc") return { kind: "altium" };
+    if (x === "schdoc") return { kind: "schdoc" };
     if (x === "eprj2" || x === "eprj") return { kind: "unsupported", why: "嘉立创EDA本地工程库（.eprj2）暂不能直接读，请在嘉立创EDA里用“文件 → 导出 → 工程”导出 .epro2 再拖进来" };
-    if (x === "brd" || x === "mcm" || x === "sip") return { kind: "unsupported", why: "Cadence Allegro .brd 是加密的二进制格式，请导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356" };
     if (x === "pcb" && /pads/i.test(name)) return { kind: "unsupported", why: "PADS 原文件请先导出 IPC-2581 或 ODB++" };
     if (/^(xls|doc|docx|pdf|png|jpg|jpeg|webp|step|stp|wrl|dxf|dwg|kicad_sch|kicad_pro|kicad_prl|schdoc|prjpcb|dsn|olb|lib|bak|log|jrl)$/.test(x)) return { kind: "ignore" };
     if (/(^|\/)(steps\/[^/]+\/|matrix\/matrix)/i.test(e.path)) return { kind: "odb" };
     if (/(^|\/)(fonts|symbols|misc|wheels|ext)\/[^/]*$/i.test(e.path) && /\/(fonts|symbols|misc)\//i.test(e.path)) return { kind: "ignore" };
     const size = e.size ?? 0;
-    if (size > 80e6) return { kind: "ignore" };
+    const allegroExt = x === "brd" || x === "mcm" || x === "sip";
+    if (size > 80e6 && !allegroExt) return { kind: "ignore" };
     let u8;
     try { u8 = await e.read(); } catch (err) { return { kind: "error", why: err.message }; }
     if (x === "xlsx") return { kind: "xlsx", u8 };
     const headBytes = u8.subarray(0, 8192);
     const head = Files.decodeText(headBytes);
+    if (allegroExt) { // Cadence Allegro database (.mcm / .sip use the same one); Eagle also writes .brd
+      const al = globalThis.ImpAllegro ? ImpAllegro.sniff(u8) : null;
+      if (al) return al.ok ? { kind: "allegro", u8, al } : { kind: "unsupported", why: al.why };
+      if (/<eagle[\s>]/i.test(head)) return { kind: "unsupported", why: "这是 Eagle / Fusion 360 的 .brd，请用 KiCad 打开（文件 → 导入 → 非 KiCad 工程）后另存为 .kicad_pcb，或导出 Gerber + 坐标文件再拖进来" };
+      return { kind: "unsupported", why: `不是能识别的 Cadence Allegro .${x} 文件，请在 Allegro 里导出 IPC-2581（File → Export → IPC 2581）或 Gerber + 坐标 + IPC-356` };
+    }
     if (/^\s*\{"type":"DOCHEAD"/.test(head)) return { kind: "easyeda", text: () => Files.decodeText(u8) };
     if (/<IPC-2581[\s>]/.test(head)) return { kind: "ipc2581", text: () => Files.decodeText(u8) };
     if (/^\s*\(kicad_pcb/.test(head)) return { kind: "kicad", text: () => Files.decodeText(u8) };
@@ -112,6 +119,10 @@ globalThis.Project = (() => {
     }
     for (const c of C.filter(c => c.kind === "altium")) {
       try { add(ImpAltium.parse(await c.entry.read(), baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: "Altium PcbDoc" }); designDirs.push(c.dir); }
+      catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    for (const c of C.filter(c => c.kind === "allegro")) {
+      try { onProgress(`正在解析 ${baseOf(c.path)}`); add(ImpAllegro.parse(c.u8, baseOf(c.path)), { path: c.path, name: stemOf(c.path), source: `Allegro .${ext(c.path)}` }); designDirs.push(c.dir); }
       catch (err) { errors.push(`${c.path}：${err.message}`); }
     }
     // EasyEDA: group docs by archive / directory
@@ -231,7 +242,7 @@ globalThis.Project = (() => {
     // outlines may differ between formats (an Altium export's board shape vs the 嘉立创 FPC outline), so across formats the parts' extent decides
     const sameSize = (s, t) => (Math.abs(s.w - t.w) < 2 && Math.abs(s.h - t.h) < 2) || (s.src !== t.src && Math.abs(s.pw - t.pw) < 0.5 && Math.abs(s.ph - t.ph) < 0.5);
     // same board in several design formats: keep the native one
-    const PREF = ["KiCad", "嘉立创EDA专业版", "Altium", "嘉立创EDA标准版", "IPC-2581", "ODB++"];
+    const PREF = ["KiCad", "嘉立创EDA专业版", "Altium", "嘉立创EDA标准版", "Allegro", "IPC-2581", "ODB++"];
     const pref = b => { const i = PREF.findIndex(s => b.source.startsWith(s)); return i < 0 ? PREF.length : i; };
     // same board = most shared designators sit at the same place (after allowing for a different origin)
     const samePlacement = (s, t, common) => {
@@ -280,8 +291,16 @@ globalThis.Project = (() => {
       bd.bom = pick ? pick.bom : null; bd.bomFile = pick ? baseOf(pick.c.path) : "";
       if (!pick) { const fromCpl = tables.find(t => t.type === "bomFromCpl" && (t.c.dir === dd || isAncestor(dd, t.c.dir)) && fit(t)); if (fromCpl) { bd.bom = fromCpl.bom; bd.bomFile = baseOf(fromCpl.c.path); } }
     }
-    if (!boards.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子文件。支持：KiCad .kicad_pcb、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
-    return { boards, errors, notes };
+    const schematics = [];
+    for (const c of C.filter(c => c.kind === "schdoc")) {
+      try {
+        onProgress(`正在解析原理图 ${baseOf(c.path)}`);
+        const bytes = await c.entry.read(), doc = ImpAltiumSch.parse(bytes, c.path);
+        doc.adData = bytes; doc.file = c.path; schematics.push(doc);
+      } catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    if (!boards.length && !schematics.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
+    return { boards, schematics, errors, notes };
   }
   return { load, expand, classify };
 })();
