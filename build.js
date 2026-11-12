@@ -2,7 +2,7 @@
 const fs = require("fs"), path = require("path");
 const SRC = path.join(__dirname, "src");
 const MODULES = ["core/dom.js", "core/geom.js", "core/files.js", "core/rar.js", "core/tables.js", "import/kicad.js", "import/ipc2581.js", "import/easyeda.js", "import/easyeda_std.js",
-  "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "import/altium_sch.js", "import/allegro.js", "export/altium_schlib.js", "core/project.js", "enrich.js", "cloud.js", "schematic.js", "app.js"];
+  "import/gerber.js", "import/fab.js", "import/odb.js", "import/altium.js", "import/altium_sch.js", "import/orcad_dsn.js", "import/allegro.js", "export/altium_schlib.js", "core/project.js", "enrich.js", "cloud.js", "schematic.js", "app.js"];
 const js = MODULES.map(f => `// ===== ${f} =====\n` + fs.readFileSync(path.join(SRC, f), "utf8").replace(/<\/script/gi, "<\/script")).join("\n");
 let html = fs.readFileSync(path.join(SRC, "shell.html"), "utf8");
 html = html.replace("/*__MODULES__*/", () => js);

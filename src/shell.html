@@ -324,7 +324,7 @@ details .field { margin-top: 10px; }
 <div class="top">
   <div class="brand">
     <h1>PCB 焊接导航</h1>
-    <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。右上角“原理图库”可查看 AD .SchDoc。原始文件只在浏览器里解析，不会上传。</p>
+    <p>拖入 PCB 工程或生产文件，按焊接顺序列出器件、在板图上标出位置和方向，也能逐脚查网络做通断测试。右上角“原理图库”可查看 AD .SchDoc 和 OrCAD .DSN。原始文件只在浏览器里解析，不会上传。</p>
   </div>
   <div class="top-actions">
     <button type="button" class="tbtn" id="boardsBtn">板子管理</button>
@@ -354,7 +354,7 @@ details .field { margin-top: 10px; }
       <tr><th>KiCad</th><td><code>.kicad_pcb</code>（6 ~ 10）</td></tr>
       <tr><th>嘉立创EDA 专业版</th><td>工程 <code>.epro</code> / <code>.epro2</code> / 备份 <code>.epru</code>；或 Gerber 包（带飞针文件）</td></tr>
       <tr><th>Altium Designer</th><td><code>.PcbDoc</code>；<code>.SchDoc</code> 在“原理图库”查看；或 IPC-2581 / ODB++ / Gerber + Pick Place</td></tr>
-      <tr><th>Cadence Allegro / OrCAD</th><td>导出的 IPC-2581（File → Export → IPC 2581）；或 Gerber(.art) + 坐标 + IPC-356。<code>.brd</code> 原文件是加密格式，读不了</td></tr>
+      <tr><th>Cadence Allegro / OrCAD</th><td>OrCAD Capture <code>.DSN</code> 原理图在“原理图库”查看；PCB 直接读 Allegro <code>.brd</code>（16.0 以后的格式）；也可用导出的 IPC-2581（File → Export → IPC 2581），或 Gerber(.art) + 坐标 + IPC-356</td></tr>
       <tr><th>PADS / 其他</th><td>IPC-2581、ODB++，或 Gerber + 坐标文件</td></tr>
     </table>
     <h3>文件组合说明</h3>
@@ -503,18 +503,18 @@ details .field { margin-top: 10px; }
       <label class="field"><span>Anon public key（不是 service_role key）</span><input id="cloudKey" type="password" autocomplete="off"></label>
       <div class="row"><button type="button" class="tbtn" id="saveCloud">保存设置</button></div>
     </details>
-    <p class="hint">原始 PCB / SchDoc / Gerber / 压缩包不会上传；仅同步解析后的板图、原理图、器件、焊接进度和删除记录。请只同步你有权存储的数据。</p>
+    <p class="hint">原始 PCB / SchDoc / DSN / Gerber / 压缩包不会上传；仅同步解析后的板图、原理图、器件、焊接进度和删除记录。请只同步你有权存储的数据。</p>
   </div>
 </dialog>
 
 <dialog id="schDialog" class="sch-dialog" aria-labelledby="schLibraryTitle">
-  <div class="dialog-head"><h2 id="schLibraryTitle">AD 原理图库</h2><button type="button" class="tbtn x" data-close="schDialog" aria-label="关闭">×</button></div>
+  <div class="dialog-head"><h2 id="schLibraryTitle">原理图库</h2><button type="button" class="tbtn x" data-close="schDialog" aria-label="关闭">×</button></div>
   <div class="sch-layout">
     <aside class="sch-sidebar">
       <button type="button" class="tbtn primary" id="schAdd">＋ 导入原理图</button>
       <h3>图纸 <span id="schCount">0 页</span></h3>
       <div class="sch-library-list" id="schLibraryList"></div>
-      <p class="sch-file">支持 Altium Designer 二进制 / ASCII .SchDoc，也可以直接选择 zip / rar 工程包。图纸在本地解析，仅同步解析结果。</p>
+      <p class="sch-file">支持 Altium Designer 二进制 / ASCII .SchDoc 和 OrCAD Capture .DSN（每页一张图），也可以直接选择 zip / rar 工程包。图纸在本地解析，仅同步解析结果。</p>
     </aside>
     <section class="sch-main">
       <div class="sch-tools">
@@ -533,7 +533,7 @@ details .field { margin-top: 10px; }
       <div class="sch-drawing-layout">
         <div class="sch-canvas">
           <svg id="schSvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AD 原理图"></svg>
-          <div class="sch-empty" id="schEmpty"><h3>把原理图放进你的图纸库</h3><p>点左侧“导入原理图”，或将 .SchDoc / 工程压缩包拖到网页。可缩放、搜索器件和网络、点击查看详情。</p></div>
+          <div class="sch-empty" id="schEmpty"><h3>把原理图放进你的图纸库</h3><p>点左侧“导入原理图”，或将 .SchDoc / .DSN / 工程压缩包拖到网页。可缩放、搜索器件和网络、点击查看详情。</p></div>
         </div>
         <aside class="sch-inspector" id="schInspector"><p>点击图中的器件或导线查看详情。也可以搜索位号、参数或网络名称。</p></aside>
       </div>

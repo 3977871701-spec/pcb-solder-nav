@@ -314,6 +314,8 @@ function renderPane(P) {
     for (const [vx, vy, vr, net] of b.vias) { const g = selNet && net === selNet ? on : cu; el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, g); el("circle", { cx: vx, cy: vy, r: Math.max(.05, vr * .45), class: "vhole" }, g); }
   }
   if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
+  // silkscreen text (Allegro boards): [text, x, y, char height, rotation°, l/c/r, mirrored, run length], anchored on the baseline
+  for (const [s, x, y, h, rot, al, mir, len] of (b.texts && b.texts[side]) || []) el("text", { transform: `translate(${x} ${y}) rotate(${-rot})${mir ? " scale(-1 1)" : ""}`, class: "bsilk btxt", style: "fill:var(--silk);stroke:none;pointer-events:none", "font-size": +(h / .72).toFixed(3), "text-anchor": al === "c" ? "middle" : al === "r" ? "end" : "start", textLength: len, lengthAdjust: "spacingAndGlyphs" }, world).textContent = s;
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));

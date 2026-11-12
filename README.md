@@ -30,7 +30,7 @@
 
 ## AD 原理图库
 
-右上角“原理图库”支持导入二进制或 ASCII `.SchDoc`，也可直接拖入 zip / rar 工程包。读取嵌入的器件符号、位号、参数、引脚、导线、网络标号和注释；不需要另找 `.SchLib`。支持“内容”聚焦和“全页”缩放、器件与网络搜索、点击详情、文字/网格开关。
+右上角“原理图库”支持导入 Altium 的二进制或 ASCII `.SchDoc`，以及 OrCAD Capture 的 `.DSN`（每页一张图），也可直接拖入 zip / rar 工程包。读取嵌入的器件符号、位号、参数、引脚、导线、网络标号和注释；不需要另找 `.SchLib`。支持“内容”聚焦和“全页”缩放、器件与网络搜索、点击详情、文字/网格开关。
 
 **AD 格式输出**：“导出 SchLib”生成原生 OLE2 `.SchLib`，包含独立符号数据流、二进制引脚、中文参数和多单元器件；“原始 SchDoc”下载字节不变的原始 AD 图纸，不是改扩展名或 SVG。原始 SchDoc 仅保存在本机、不会上传，其他设备需重新导入原件才能下载；同步后的解析数据仍可生成 SchLib。
 
@@ -61,10 +61,10 @@ GitHub Pages 是静态托管，跨设备同步需要部署者配置一次 Supaba
 | 嘉立创EDA 专业版 | 工程 `.epro` / `.epro2`，备份 `.epru`（含封装）；一个工程多块板会分开显示 | 嘉立创 Gerber 包（自带 `FlyingProbeTesting.json` 网表） |
 | 嘉立创EDA 标准版 | PCB 源文件 `.json` | Gerber 套件 |
 | Altium Designer | `.PcbDoc`（二进制和 ASCII）；`.SchDoc` 在“原理图库”查看 | IPC-2581、ODB++、Gerber + Pick Place + IPC-356 |
-| Cadence Allegro / OrCAD | `.brd`（Allegro 16.0 以后的格式；旁边的 OrCAD 原理图 `.DSN` 自动忽略） | IPC-2581（File → Export → IPC 2581）；Gerber/`.art` + 坐标 + IPC-356（File → Export → IPC 356） |
+| Cadence Allegro / OrCAD | `.brd`（Allegro 16.0 以后的格式）；OrCAD 原理图 `.DSN` 在“原理图库”查看 | IPC-2581（File → Export → IPC 2581）；Gerber/`.art` + 坐标 + IPC-356（File → Export → IPC 356） |
 | PADS、Xpedition 等 | IPC-2581、ODB++ | Gerber 套件 |
 
-Allegro `.brd` 直接读出器件、焊盘（形状、尺寸、钻孔）、引脚号、网络、器件值、板框、走线、过孔和丝印外框。实测过 16.6 / 17.4 / 18.1 / 19.0 格式的板子，其他 16.x / 17.x 格式按同样的结构读，页面会提醒核对；Allegro 16.0 以前的老文件或读不出来的文件，页面会写明文件版本，请改用 IPC-2581。Eagle 的 `.brd` 请先用 KiCad 打开另存为 `.kicad_pcb`。嘉立创本地工程库 `.eprj2` 也请先导出成 `.epro2`。
+Allegro `.brd` 直接读出器件、焊盘（形状、尺寸、钻孔）、引脚号、网络、器件值、板框、走线、过孔、顶底面铺铜、丝印外框和丝印文字。实测过 16.6 / 17.2 / 17.4 / 18.1 / 19.0 格式的板子，其他 16.x / 17.x 格式按同样的结构读，页面会提醒核对；Allegro 16.0 以前的老文件或读不出来的文件，页面会写明文件版本，请改用 IPC-2581。八边形、十字、菱形、六边形、三角形、环形等少见焊盘形状没有样板验证过，遇到时页面会提醒核对。OrCAD `.DSN` 读出器件符号、位号、器件值、引脚、导线、网络标号、电源符号和跨页端口，实测过 3.2 版设计库（Capture 16.6 ~ 17.4）；多单元器件的单元顺序按放置顺序推断，页面会提示。Eagle 的 `.brd` 请先用 KiCad 打开另存为 `.kicad_pcb`。嘉立创本地工程库 `.eprj2` 也请先导出成 `.epro2`。
 
 **Gerber 套件** = Gerber + 钻孔 + 坐标文件（Pick and Place / CPL）。再加一个 IPC-356 网表或嘉立创飞针文件，就有引脚号和网络；没有网表时，焊盘按“中心对称 + 封装尺寸”归到器件，测引脚不可用，页面会提示。坐标文件和 Gerber 的原点、单位（mm / mil / inch）、Y 方向不一致时会自动对齐。
 
@@ -81,7 +81,8 @@ Allegro `.brd` 直接读出器件、焊盘（形状、尺寸、钻孔）、引�
 | ODB++（KiCad 导出） | pcbnew | ≤ 0.012 mm（导出文件只保留 2 位小数） |
 | 嘉立创EDA 专业版 | Allegro 原设计；嘉立创自己的飞针文件 | 0 偏差；底面 0/90/180/270° 全部正确 |
 | Altium `.PcbDoc` | KiCad 的 Altium 导入器（5 块板） | ≤ 0.0014 mm，网络、器件值一致 |
-| Allegro `.brd` | 文件里 Allegro 自己存的每个焊盘的板上外框；Allegro 导出的 `.alg` | 7 块板（16.6 / 17.4 / 18.1 / 19.0 格式）1601 个焊盘 ≤ 0.001 mm，含底面和 45° 旋转；网络与 `.alg` 一致 |
+| Allegro `.brd` | 文件里 Allegro 自己存的每个焊盘的板上外框；Allegro 导出的 `.alg` | 8 块板（16.6 / 17.2 / 17.4 / 18.1 / 19.0 格式）焊盘 ≤ 0.001 mm，含底面和 45° 旋转；网络、铺铜面积、丝印文字与 `.alg` 一致 |
+| OrCAD `.DSN` | 同一设计的 Allegro `.brd` | 86 个位号、器件值全部一致；引脚的网络名 286/287 一致 |
 | 嘉立创EDA 标准版 | 走线端点自洽检查 | 184 个走线端点全部落在同网络焊盘上 |
 | Gerber + 坐标 + IPC-356 | Allegro IPC-2581 | 350 个焊盘 0 偏差，引脚号和网络一致 |
 
@@ -120,7 +121,7 @@ Allegro `.brd` 直接读出器件、焊盘（形状、尺寸、钻孔）、引�
 
 ```
 src/core/      dom 公共界面工具、geom 几何、files 解压、rar RAR5 解压、tables 表格/网表、project 文件归组
-src/import/    kicad、ipc2581、easyeda、altium、altium_sch、allegro、odb、gerber、fab
+src/import/    kicad、ipc2581、easyeda、altium、altium_sch、allegro、orcad_dsn、odb、gerber、fab
 src/schematic.js  AD 原理图库、图纸交互与 AD 文件下载
 src/export/    altium_schlib 原生 OLE2 / SchLib 和二进制引脚写入
 src/enrich.js  焊接分步、极性、分组
@@ -130,7 +131,7 @@ src/app.js     界面、本地存储与同步合并
 
 解析模块不依赖 DOM，可以直接在 Node（≥ 18）里跑；`test/` 里是对照测试脚本，其中 `run_all.js` 需要本地样本数据（不在仓库里）。`node test/cloud.js` 可直接验证云端 API 协议；`test/browser_sync.js` 使用 Chrome DevTools Protocol 验证真实导入和模拟双设备同步。
 
-Allegro 测试需要本地样本：`ALLEGRO_BRD=/样本.brd ALLEGRO_ZIP=/样本.zip ALLEGRO_SVG=/输出.svg node test/allegro.js`，`ALLEGRO_EXTRA=/a.brd:/b.brd` 可再加几块板做对照。
+Allegro 测试需要本地样本：`ALLEGRO_BRD=/样本.brd ALLEGRO_ZIP=/样本.zip ALLEGRO_SVG=/输出.svg node test/allegro.js`，`ALLEGRO_EXTRA=/a.brd:/b.brd` 可再加几块板做对照。OrCAD 原理图测试：`ORCAD_DSN=/样本.DSN ORCAD_ZIP=/样本.zip ORCAD_SVG=/输出目录 node test/orcad_dsn.js`。
 
 AD 原理图测试需要本地样本：`SCH_SAMPLES=/样本目录 node test/altium_sch.js` 验证三页解析；`SCH_RAR=/样本.rar node test/schlib_export.js` 验证原生 SchLib、二进制引脚和中文参数；在 9223 端口打开测试 Chrome 后，运行 `SCH_RAR=/样本.rar node test/browser_schematic.js` 验证真实 RAR 导入、看图、SchLib 导出、原始 SchDoc 下载、刷新、同步和删除。
 

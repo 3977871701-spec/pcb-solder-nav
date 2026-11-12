@@ -43,7 +43,8 @@ function renderSchSheet(fit = false) {
   $("#schSheetTools").hidden = !d;
   $("#schExportLib").disabled = !d;
   $("#schExportDoc").disabled = !d;
-  if (!d) { $("#schInspector").innerHTML = "<p>导入 .SchDoc 文件或 zip / rar 工程包后，可以在这里查看原理图。</p>"; return; }
+  $("#schExportDoc").hidden = !!d && !/Altium/i.test(d.source || ""); // only AD sheets keep their original file
+  if (!d) { $("#schInspector").innerHTML = "<p>导入 AD .SchDoc、OrCAD .DSN 或 zip / rar 工程包后，可以在这里查看原理图。</p>"; return; }
   $("#schTitle").textContent = d.title;
   $("#schMeta").textContent = `${d.components.length} 个器件 · ${d.pins.length} 个引脚 · ${d.nets.filter(n => n.name).length} 个命名网络`;
   const defs = el("defs", {}, schSvg), pattern = el("pattern", { id: "schGrid", width: 2.54, height: 2.54, patternUnits: "userSpaceOnUse" }, defs);
@@ -63,7 +64,8 @@ function renderSchSheet(fit = false) {
   for (const p of d.junctions) el("circle", { cx: p[0], cy: p[1], r: 0.7, fill: "#17693c" }, pg);
   for (const p of d.ports) {
     const g = el("g", { transform: `translate(${p.x} ${p.y}) rotate(${p.type === 17 ? (3 - p.orientation) * 90 : 0})`, class: "sch-port", "data-port": d.ports.indexOf(p) }, pg);
-    if (p.type === 18) {
+    if (p.drawn) el("circle", { r: 1.2, fill: "transparent" }, g); // symbol graphics are already in d.shapes (OrCAD)
+    else if (p.type === 18) {
       el("path", { d: "M0 0L3 -3H20V3H3Z", fill: "#fff4ad", stroke: p.color, "stroke-width": 0.3 }, g);
     } else if (p.style === 4) el("path", { d: "M0 0L-3 5H3Z", fill: "none", stroke: p.color, "stroke-width": 0.35 }, g);
     else if (p.style === 2 || p.style === 5 || p.style === 6) el("path", { d: "M0 0V3M-4 3H4M-2.5 4.5H2.5M-1 6H1", fill: "none", stroke: p.color, "stroke-width": 0.35 }, g);
@@ -168,7 +170,7 @@ function openSchematic(key) {
   SCH.doc = SCH.docs.find(d => d.key === key) || SCH.docs[0] || null;
   SCH.selection = null; SCH.net = -1; SCH.vb = null;
   $("#schSearch").value = ""; $("#schSearchResults").innerHTML = "";
-  $("#schInspector").innerHTML = SCH.doc ? "<p>点击图中的器件或导线查看详情。也可以搜索位号、参数或网络名称。</p>" : "<p>点“导入原理图”选择 AD .SchDoc 文件或工程压缩包。</p>";
+  $("#schInspector").innerHTML = SCH.doc ? "<p>点击图中的器件或导线查看详情。也可以搜索位号、参数或网络名称。</p>" : "<p>点“导入原理图”选择 AD .SchDoc、OrCAD .DSN 文件或工程压缩包。</p>";
   renderSchLibrary(); renderSchSheet(true);
 }
 function showSchematics() { disarm(); if (!SCH.doc && SCH.docs.length) openSchematic(SCH.docs[0].key); renderSchLibrary(); openDialog("#schDialog"); if (SCH.doc) requestAnimationFrame(schContent); }
@@ -187,6 +189,7 @@ function ingestSchematics(docs, roots) {
     DB.put(d, "schematics"); markDirty(d.key); added.add(d.key);
   }
   for (const d of SCH.docs.filter(d => [...roots].some(r => d.file.startsWith(r + "/")) && !added.has(d.key))) removeSchematic(d.key);
+  $("#schTopCount").textContent = `${SCH.docs.length} 页`;
   return added.size;
 }
 function schDownload(data, name) {
@@ -202,7 +205,7 @@ $("#schLabels").onclick = e => { SCH.labels = !SCH.labels; e.currentTarget.setAt
 $("#schGridBtn").onclick = e => { SCH.grid = !SCH.grid; e.currentTarget.setAttribute("aria-pressed", SCH.grid); schSvg.querySelector('[fill="url(#schGrid)"]')?.toggleAttribute("hidden", !SCH.grid); };
 $("#schExportLib").onclick = () => {
   try {
-    const result = AltiumSchLib.build(SCH.docs), root = (SCH.doc?.file.split("/")[0] || "SchematicSymbols").replace(/\.(zip|rar|schdoc)$/i, "");
+    const result = AltiumSchLib.build(SCH.docs), root = (SCH.doc?.file.split("/")[0] || "SchematicSymbols").replace(/\.(zip|rar|schdoc|dsn)$/i, "");
     schDownload(result.data, root + ".SchLib"); toast(`已导出 SchLib：${result.components} 个符号，${result.pins} 个引脚`);
   } catch (e) { toast("导出 SchLib 失败：" + e.message, 6000); }
 };

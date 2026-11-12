@@ -39,6 +39,11 @@ globalThis.Project = (() => {
     if (x === "schdoc") return { kind: "schdoc" };
     if (x === "eprj2" || x === "eprj") return { kind: "unsupported", why: "嘉立创EDA本地工程库（.eprj2）暂不能直接读，请在嘉立创EDA里用“文件 → 导出 → 工程”导出 .epro2 再拖进来" };
     if (x === "pcb" && /pads/i.test(name)) return { kind: "unsupported", why: "PADS 原文件请先导出 IPC-2581 或 ODB++" };
+    if (x === "dsn" && globalThis.ImpOrcadDsn) { // OrCAD Capture design (OLE2 with Library + Views/*/Pages); Specctra writes text .dsn files
+      let u8; try { u8 = await e.read(); } catch (err) { return { kind: "error", why: err.message }; }
+      const s = ImpOrcadDsn.sniff(u8);
+      return s.ok ? { kind: "orcad", u8 } : s.specctra ? { kind: "ignore" } : { kind: "unsupported", why: s.why };
+    }
     if (/^(xls|doc|docx|pdf|png|jpg|jpeg|webp|step|stp|wrl|dxf|dwg|kicad_sch|kicad_pro|kicad_prl|schdoc|prjpcb|dsn|olb|lib|bak|log|jrl)$/.test(x)) return { kind: "ignore" };
     if (/(^|\/)(steps\/[^/]+\/|matrix\/matrix)/i.test(e.path)) return { kind: "odb" };
     if (/(^|\/)(fonts|symbols|misc|wheels|ext)\/[^/]*$/i.test(e.path) && /\/(fonts|symbols|misc)\//i.test(e.path)) return { kind: "ignore" };
@@ -299,7 +304,18 @@ globalThis.Project = (() => {
         doc.adData = bytes; doc.file = c.path; schematics.push(doc);
       } catch (err) { errors.push(`${c.path}：${err.message}`); }
     }
-    if (!boards.length && !schematics.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
+    for (const c of C.filter(c => c.kind === "orcad")) { // one sheet per page; the original DSN is not kept
+      try {
+        onProgress(`正在解析 OrCAD 原理图 ${baseOf(c.path)}`);
+        const docs = ImpOrcadDsn.parse(c.u8, c.path);
+        for (const doc of docs) {
+          schematics.push(doc);
+          if (doc.unsupported.length) notes.push(`${doc.file}：有内容没能完整解析（已画占位或略过）：${doc.unsupported.slice(0, 4).join("、")}${doc.unsupported.length > 4 ? ` 等 ${doc.unsupported.length} 项` : ""}`);
+        }
+        for (const e of docs.errors) errors.push(`${c.path} 的页面 ${e}`);
+      } catch (err) { errors.push(`${c.path}：${err.message}`); }
+    }
+    if (!boards.length && !schematics.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、OrCAD .DSN 原理图、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
     return { boards, schematics, errors, notes };
   }
   return { load, expand, classify };
