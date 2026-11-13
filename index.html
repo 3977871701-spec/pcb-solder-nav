@@ -3149,12 +3149,12 @@ globalThis.ImpOrcadDsn = (() => {
     if (R.b() === 2) { const g = head(R, [2]); R.str(); R.str(); R.skip(4); o.prims = prims(R, g, bad).list; done(R, g); }
     done(R, h); return o;
   }
-  function part(R) {
+  function part(R) { // placed pins carry the id of their net; the record ends with the unit (u16 index into the package's devices, A = 0)
     const h = head(R, [13]), o = { props: h.props, inst: R.u32(), lib: R.u32() }; o.sym = R.str(); R.skip(4);
     const b = [R.i16(), R.i16(), R.i16(), R.i16()]; o.bb = [b[1], b[0], b[3], b[2]]; o.x = R.i16(); o.y = R.i16(); o.color = R.b(); o.ori = R.b() & 7; R.skip(2);
     o.disp = disp(R); R.skip(1); o.ref = R.str(); o.value = R.u32(); R.skip(10);
-    o.pins = []; for (let n = R.u16(); n--;) { const q = head(R, [16]), i = R.i16(), x = R.i16(), y = R.i16(); R.skip(8); disp(R); done(R, q); o.pins.push({ i: Math.abs(i), x, y }); }
-    o.pkg = R.str(); done(R, h); return o;
+    o.pins = []; for (let n = R.u16(); n--;) { const q = head(R, [16]), i = R.i16(), x = R.i16(), y = R.i16(), net = R.u32(); R.skip(4); disp(R); done(R, q); o.pins.push({ i: Math.abs(i), x, y, net }); }
+    o.pkg = R.str(); if (h.end >= R.pos + 2) o.unit = R.u16(); done(R, h); return o;
   }
   function page(u8, bad) {
     const R = reader(u8); head(R, [10]);
@@ -3202,7 +3202,7 @@ globalThis.ImpOrcadDsn = (() => {
     if (!pages.length) return { ok: false, why: "OrCAD 设计里没有原理图页（Views/*/Pages）" };
     return { ok: true, files, pages };
   }
-  function connect(doc, ids, names) { // geometry like the Altium importer, plus OrCAD's own net ids and label names
+  function connect(doc, ids, names, pids, known) { // geometry like the Altium importer, plus OrCAD's own net ids and label names
     const { wires, pins, junctions, ports } = doc, p0 = wires.length, j0 = p0 + pins.length, c0 = j0 + junctions.length, total = c0 + ports.length;
     const up = Array.from({ length: total }, (_, i) => i), find = x => { while (up[x] !== x) x = up[x] = up[up[x]]; return x; }, join = (a, b) => { a = find(a); b = find(b); if (a !== b) up[b] = a; };
     const at = new Map(), eps = 0.012, key = p => p.map(x => Math.round(x / eps)).join(",");
@@ -3215,7 +3215,9 @@ globalThis.ImpOrcadDsn = (() => {
     junctions.forEach((p, i) => { add(p, j0 + i); onWire(p, j0 + i); });
     ports.forEach((p, i) => { if (p.wire >= 0) join(p.wire, c0 + i); else { add([p.x, p.y], c0 + i); onWire([p.x, p.y], c0 + i); } const k = p.name.toUpperCase(); if (byName.has(k)) join(byName.get(k), c0 + i); else byName.set(k, c0 + i); });
     const groups = new Map(); for (let i = 0; i < total; i++) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
-    for (const g of groups.values()) {
+    const auto = new Map(), uses = new Map(); // Capture names an unnamed net "N" + the id one of its pins carries: use it only if that name is in its saved net list and unique here
+    for (const [r, g] of groups) { const hit = [...new Set(g.filter(i => i >= p0 && i < j0 && pids[i - p0]).map(i => "N" + pids[i - p0]))].filter(n => known.has(n)); if (hit.length === 1) { auto.set(r, hit[0]); uses.set(hit[0], (uses.get(hit[0]) || 0) + 1); } } // ids < 10000 are saved zero-padded ("N00627") and proved unreliable: left unnamed
+    for (const [r, g] of groups) {
       const net = { name: "", wires: [], pins: [], ports: [], points: [] }, label = ["", ""];
       for (const i of g) {
         if (i < p0) { net.wires.push(i); net.points.push(...wires[i].points); label[0] ||= names.get(ids[i]) || ""; }
@@ -3224,6 +3226,7 @@ globalThis.ImpOrcadDsn = (() => {
         else { const p = ports[i - c0]; net.ports.push(i - c0); if (p.type === 17) net.name = p.name; else label[p.type === 25 ? 0 : 1] ||= p.name; net.points.push([p.x, p.y]); }
       }
       net.name ||= label[0] || label[1];
+      if (!net.name && uses.get(auto.get(r)) === 1) net.name = auto.get(r);
       if (!net.wires.length && net.pins.length < 2 && !net.ports.length) continue;
       const k = doc.nets.length;
       for (const i of net.wires) wires[i].net = k;
@@ -3272,18 +3275,19 @@ globalThis.ImpOrcadDsn = (() => {
     }
     const props = list => Object.fromEntries(list.map(([a, b]) => [S(a), S(b)]));
     const shown = (d, name, val) => ["", val, `${name} = ${val}`, name, val ? `${name} = ${val}` : "", val][d.mode] ?? val;
-    // parts
+    // parts (pids: OrCAD net id of every placed pin, parallel to doc.pins)
+    const pids = [];
     for (const o of pg.parts) {
-      const sym = find(o.sym, S(o.lib), [24]), pk = pkgs.get(o.pkg), ci = doc.components.length, ps = props(o.props);
-      const k = ctx.units.get(o.ref) || 0, dev = pk?.dev.length > 1 ? pk.dev[k] || pk.dev[0] : pk?.dev[0]; ctx.units.set(o.ref, k + 1);
-      if (pk?.dev.length > 1) bad.push(`多单元器件 ${o.ref}：文件里没解出单元号，按放置顺序对应单元，引脚号可能对调`); // unit id not decoded yet
+      const sym = find(o.sym, S(o.lib), [24]), pk = pkgs.get(o.pkg), ci = doc.components.length, ps = props(o.props), units = pk?.dev.length || 1;
+      const k = ctx.units.get(o.ref) || 0, known = o.unit < units, u = units < 2 ? 0 : known ? o.unit : k, dev = pk?.dev[u] || pk?.dev[0]; ctx.units.set(o.ref, k + 1);
+      if (units > 1 && !known) bad.push(`多单元器件 ${o.ref}：文件里没解出单元号，按放置顺序对应单元，引脚号可能对调`); // stored unit missing or out of range
       const tr = place(sym, o.x, o.y, o.ori);
       if (sym && o.pins.length) { // OrCAD also stores every placed pin hot spot: use it to check the transform
         const ok = () => o.pins.every(q => { const sp = sym.pins[q.i - 1]; if (!sp) return true; const a = tr.at(sp.h); return a[0] === q.x && a[1] === q.y; });
         if (!ok()) { const q = o.pins.find(q => sym.pins[q.i - 1]); if (q) { const a = tr.ap(sym.pins[q.i - 1].h); tr.T = [q.x - a[0], q.y - a[1]]; } st.fixed++; if (!ok()) st.mismatch++; }
       }
       const footprint = ps["PCB Footprint"] || pk?.footprint || ""; delete ps["PCB Footprint"];
-      const comp = { index: ci, ref: o.ref, value: S(o.value), description: "", library: o.sym.replace(/\.(Normal|Convert)$/i, ""), footprint, origin: P(tr.T), part: pk?.dev.length > 1 ? Math.min(k, pk.dev.length - 1) + 1 : 1, partCount: pk?.dev.length || 1, properties: { ...ps, "Source Package": o.pkg, "Source Library": S(o.lib) }, pins: [], bb: null };
+      const comp = { index: ci, ref: o.ref, value: S(o.value), description: "", library: o.sym.replace(/\.(Normal|Convert)$/i, ""), footprint, origin: P(tr.T), part: Math.min(u, units - 1) + 1, partCount: units, properties: { ...ps, "Source Package": o.pkg, "Source Library": S(o.lib) }, pins: [], bb: null };
       doc.components.push(comp);
       const c = color(o.color, BODY), pts = [];
       if (sym) {
@@ -3299,7 +3303,7 @@ globalThis.ImpOrcadDsn = (() => {
         const [x, y] = P(base), [ex, ey] = P(hot), dx = ex - x, dy = ey - y, o4 = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 0 : 2) : (dy < 0 ? 1 : 3);
         const showName = name && name !== number && (nameOn ?? true), showNum = numOn && (dx || dy);
         const pin = { index: doc.pins.length, owner: ci, number, name, description: "", electrical: sp?.type ?? 4, flags: o4 | (showName ? 8 : 0) | (showNum ? 16 : 0), color: 0, symbols: [sp && sp.shape & 2 ? 3 : 0, sp && sp.shape & 4 ? 1 : 0, 0, 0], x, y, ex, ey, net: "" };
-        doc.pins.push(pin); comp.pins.push(pin.index); pts.push(base, hot);
+        doc.pins.push(pin); pids.push(q.net); comp.pins.push(pin.index); pts.push(base, hot);
         const v = o4 === 1 || o4 === 3, s = 1.6, sx = Math.sign(dx), sy = Math.sign(dy);
         if (showNum) text((x + ex) / 2 + (v ? -0.4 : 0), (y + ey) / 2 + (v ? 0 : -0.4), number, s, v ? -90 : 0, "middle", c, ci);
         if (showName) text(x - sx * 0.8 + (v ? s * 0.35 : 0), y - sy * 0.8 + (v ? 0 : s * 0.35), name, s * 1.05, v ? -90 : 0, (v ? sy < 0 : sx > 0) ? "end" : "start", c, ci);
@@ -3343,13 +3347,13 @@ globalThis.ImpOrcadDsn = (() => {
       const p = s.split(",").map(Number), through = pg.wires.filter(w => (w.a[0] === w.b[0] ? p[0] === w.a[0] && p[1] > Math.min(w.a[1], w.b[1]) && p[1] < Math.max(w.a[1], w.b[1]) : w.a[1] === w.b[1] && p[1] === w.a[1] && p[0] > Math.min(w.a[0], w.b[0]) && p[0] < Math.max(w.a[0], w.b[0]))).length;
       if (n + 2 * through >= 3) doc.junctions.push(P(p));
     }
-    connect(doc, ids, pg.nets);
+    connect(doc, ids, pg.nets, pids, ctx.netNames);
     return doc;
   }
   function parse(u8, fileName, stats) {
     const sn = sniff(u8); if (!sn.ok) throw new Error(sn.why);
     const { files } = sn, lib = library(files.Library()), all = [];
-    const ctx = { lib, syms: new Map(), pkgs: new Map(), units: new Map() }, add = s => { if (!ctx.syms.has(s.name)) ctx.syms.set(s.name, []); ctx.syms.get(s.name).push(s); };
+    const ctx = { lib, syms: new Map(), pkgs: new Map(), units: new Map(), netNames: new Set() }, add =s => { if (!ctx.syms.has(s.name)) ctx.syms.set(s.name, []); ctx.syms.get(s.name).push(s); };
     if (files.Cache) { // the design cache holds the library copies of every placed symbol and package; find their records by signature
       const u8c = files.Cache(), R = reader(u8c);
       for (let i = 0; i + 24 < u8c.length; i++) {
@@ -3360,6 +3364,9 @@ globalThis.ImpOrcadDsn = (() => {
     for (const key of Object.keys(files).filter(k => k.startsWith("Packages/"))) {
       try { const R = reader(files[key]()); for (let n = R.u16(); n--;) { done(R, head(R, [6])); for (let m = R.u16(); m--;) add(symbol(R, all)); } const g = pkg(R); if (!ctx.pkgs.has(g.name)) ctx.pkgs.set(g.name, g); }
       catch { all.push(`封装 ${key.slice(9)}`); }
+    }
+    for (const key of Object.keys(files).filter(k => /^Views\/[^/]+\/Hierarchy\/Hierarchy$/.test(k))) { // Capture's own net names ([u16 length]"N<digits>"\0) confirm the "N" + id names of unnamed nets
+      const u = files[key](); for (let i = 2; i < u.length; i++) { const n = u[i - 2]; if (u[i] !== 78 || u[i - 1] || n < 2 || u[i + n] !== 0) continue; let s = "N"; for (let j = 1; j < n && u[i + j] >= 48 && u[i + j] <= 57; j++) s += String.fromCharCode(u[i + j]); if (s.length === n) ctx.netNames.add(s); }
     }
     const order = []; // page order from each schematic folder's "Schematic" stream, else natural order
     for (const view of [...new Set(sn.pages.map(k => k.split("/")[1]))]) {
@@ -4537,7 +4544,10 @@ function schContent() {
   const pts = d.wires.flatMap(w => w.points);
   for (const c of d.components) if (c.bb) pts.push([c.bb[0], c.bb[1]], [c.bb[2], c.bb[3]]);
   for (const p of d.ports) pts.push([p.x, p.y]);
-  if (pts.length) schFrame(Geom.bboxOf(pts), 18, 50); else schFit();
+  if (!pts.length) return schFit();
+  const bb = Geom.bboxOf(pts);
+  // content that already fills most of the sheet: show the whole sheet, so labels at the edge and the title block are not cut off
+  if (bb[2] - bb[0] + 36 >= d.width * .75 && bb[3] - bb[1] + 36 >= d.height * .75) schFit(); else schFrame(bb, 18, 50);
 }
 function schFrame(bb, pad = 7, min = 20) {
   const w = Math.max(min, bb[2] - bb[0] + pad * 2), h = Math.max(min, bb[3] - bb[1] + pad * 2);
@@ -5073,8 +5083,8 @@ function renderPane(P) {
     for (const [vx, vy, vr, net] of b.vias) { const g = selNet && net === selNet ? on : cu; el("circle", { cx: vx, cy: vy, r: vr, class: "via" }, g); el("circle", { cx: vx, cy: vy, r: Math.max(.05, vr * .45), class: "vhole" }, g); }
   }
   if (b.silk[side]) el("path", { d: b.silk[side], class: "bsilk" }, world);
-  // silkscreen text (Allegro boards): [text, x, y, char height, rotation°, l/c/r, mirrored, run length], anchored on the baseline
-  for (const [s, x, y, h, rot, al, mir, len] of (b.texts && b.texts[side]) || []) el("text", { transform: `translate(${x} ${y}) rotate(${-rot})${mir ? " scale(-1 1)" : ""}`, class: "bsilk btxt", style: "fill:var(--silk);stroke:none;pointer-events:none", "font-size": +(h / .72).toFixed(3), "text-anchor": al === "c" ? "middle" : al === "r" ? "end" : "start", textLength: len, lengthAdjust: "spacingAndGlyphs" }, world).textContent = s;
+  // silkscreen text (Allegro boards; a designator is left out while the page draws its own designator labels): [text, x, y, char height, rotation°, l/c/r, mirrored, run length], anchored on the baseline
+  for (const [s, x, y, h, rot, al, mir, len] of (b.texts && b.texts[side]) || []) if (!(S.lbl === "ref" && S.pm[s])) el("text", { transform: `translate(${x} ${y}) rotate(${-rot})${mir ? " scale(-1 1)" : ""}`, class: "bsilk btxt", style: "fill:var(--silk);stroke:none;pointer-events:none", "font-size": +(h / .72).toFixed(3), "text-anchor": al === "c" ? "middle" : al === "r" ? "end" : "start", textLength: len, lengthAdjust: "spacingAndGlyphs" }, world).textContent = s;
   if (b.edges) el("path", { d: b.edges, class: "b-edge" }, world);
   const done = doneOf(), pin = S.mode === "pin";
   const selRefs = new Set(pin ? [] : S.sel ? (b.groups.find(g => g.id === S.sel)?.refs || []) : (S.cur ? [S.cur] : []));

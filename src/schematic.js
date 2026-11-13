@@ -18,7 +18,10 @@ function schContent() {
   const pts = d.wires.flatMap(w => w.points);
   for (const c of d.components) if (c.bb) pts.push([c.bb[0], c.bb[1]], [c.bb[2], c.bb[3]]);
   for (const p of d.ports) pts.push([p.x, p.y]);
-  if (pts.length) schFrame(Geom.bboxOf(pts), 18, 50); else schFit();
+  if (!pts.length) return schFit();
+  const bb = Geom.bboxOf(pts);
+  // content that already fills most of the sheet: show the whole sheet, so labels at the edge and the title block are not cut off
+  if (bb[2] - bb[0] + 36 >= d.width * .75 && bb[3] - bb[1] + 36 >= d.height * .75) schFit(); else schFrame(bb, 18, 50);
 }
 function schFrame(bb, pad = 7, min = 20) {
   const w = Math.max(min, bb[2] - bb[0] + pad * 2), h = Math.max(min, bb[3] - bb[1] + pad * 2);

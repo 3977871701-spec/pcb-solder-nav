@@ -1,6 +1,7 @@
 // OrCAD Capture DSN import check. Samples are not committed:
 // ORCAD_DSN=/x/design.DSN ORCAD_ZIP=/x/project.zip (with the matching .brd) [ORCAD_SVG=/out/dir] node test/orcad_dsn.js
-// Prints per-page counts, geometry sanity, the cross-check against the board and renders every page with schematic.js.
+// Prints per-page counts, geometry sanity, the cross-check against the board (incl. decoded units of multi-unit parts and
+// Capture's "N<id>" names for unnamed nets) and renders every page with schematic.js.
 const assert = require("assert"), fs = require("fs"), path = require("path"), vm = require("vm");
 require("./harness");
 require("../src/import/altium_sch.js"); require("../src/export/altium_schlib.js");
@@ -69,9 +70,15 @@ function render(d, file) { // the real viewer: src/schematic.js on a tiny DOM st
   }
   const consistent = [...netMap.values()].filter(s => s.size === 1).length;
   console.log(`pins: ${numOk}/${pins} pin numbers exist on the board; named nets ${nameOk}/${named} agree; schematic nets mapping to exactly one board net ${consistent}/${netMap.size}; mismatches: ${wrong.slice(0, 12).join("; ") || "-"}`);
-  for (const r of ["U6", "X1", "D1", "C8", "R2", "C25", "Q4"]) {
-    const x = comps.find(x => x.c.ref === r); if (!x) { console.log(`  ${r}: not in schematic`); continue; }
+  // multi-unit parts take their unit from the file (no placement-order note, every unit once); a net is given Capture's "N<id>" name only where it equals the board's
+  const units = new Map(); for (const { c } of comps) if (c.partCount > 1) (units.get(c.ref) || units.set(c.ref, []).get(c.ref)).push(c.part);
+  const boardN = new Set(board.parts.flatMap(p => p.pads.map(q => q[1] || "")).filter(n => /^N\d+$/.test(n))), sameN = new Set(docs.flatMap(d => d.nets.map(n => n.name)).filter(n => boardN.has(n)));
+  console.log(`multi-unit: ${[...units].map(([r, u]) => `${r} units ${u.map(k => String.fromCharCode(64 + k)).join("+")}`).join(", ") || "-"}; board N-nets reproduced by name ${sameN.size}/${boardN.size}`);
+  assert.ok(!docs.some(d => d.unsupported.some(n => /多单元器件/.test(n))) && [...units.values()].every(u => new Set(u).size === u.length), "unit of every multi-unit instance decoded");
+  assert.ok(!wrong.some(w => units.has(w.split(".")[0]) || / N\d+≠/.test(w)), "multi-unit pins and N<id> net names agree with the board");
+  for (const r of ["U6", "X1", "D1", "C8", "R2", "C25", "Q4", "Q2"]) {
+    const xs = comps.filter(x => x.c.ref === r); if (!xs.length) console.log(`  ${r}: not in schematic`);
     const p = parts.get(r), pads = new Map((p?.pads || []).map(q => [String(q[0]), q[1] || ""]));
-    console.log(`  ${r} (${x.c.value}, ${x.c.footprint}): ` + x.c.pins.map(i => x.d.pins[i]).map(q => `${q.number}${q.name && q.name !== q.number ? "/" + q.name : ""}=${q.net || "~"}${pads.has(q.number) ? (norm(q.net) === norm(pads.get(q.number)) ? "" : "|brd " + (pads.get(q.number) || "~")) : "|no pad"}`).join(" "));
+    for (const x of xs) console.log(`  ${r}${x.c.partCount > 1 ? String.fromCharCode(64 + x.c.part) : ""} (${x.c.value}, ${x.c.footprint}): ` +x.c.pins.map(i => x.d.pins[i]).map(q => `${q.number}${q.name && q.name !== q.number ? "/" + q.name : ""}=${q.net || "~"}${pads.has(q.number) ? (norm(q.net) === norm(pads.get(q.number)) ? "" : "|brd " + (pads.get(q.number) || "~")) : "|no pad"}`).join(" "));
   }
 })().catch(e => { console.error(e); process.exitCode = 1; });
