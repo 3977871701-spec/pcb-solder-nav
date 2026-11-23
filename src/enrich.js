@@ -13,6 +13,8 @@ globalThis.Enrich = (() => {
   // bottom side: same order again after flipping the board (steps 11–17)
   for (let k = 1; k <= 7; k++) STEPS[10 + k] = ["底面 · " + STEPS[k][0], (k === 1 ? "顶面焊完再翻面焊，翻面时垫高别压到顶面器件。" : "") + STEPS[k][1]];
   const FINE = /QFN|DFN|LGA|BGA|WSON|VSON|USON|XSON|TSON|(^|[^A-Z])SON|QFP|TSSOP|MSOP|SSOP|CSP|LQFN|VQFN|FH\d|FPC|FFC|USB[_-]?C|Type-?C|P0\.[345]\d*mm/i;
+  // a 1–2 pad part has no pitch to speak of: "FPC-PAD-SLOT" style wire / FPC-tail solder pads are not fine-pitch connectors
+  const fine = (p, fp) => FINE.test(fp) && p.pads.filter(q => q[3] !== 2).length > 2;
   const MID = /SOT|SOIC|(^|_)SOP|ESOP|HSOP|SC-?70|SC-?88|Crystal|Oscillator|TO-2|DPAK|D2PAK|PowerPAK|SMA|SMB|SMC|MELF/i;
   const pkg = fp => (fp.match(/(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?![0-9])/) || [])[1] || "";
   const isTP = p => /^TP\d/i.test(p.r) || /TestPoint|TESTPOINT/i.test(p.fp) || (p.fp === "PAD" && p.pads.length <= 1);
@@ -38,7 +40,7 @@ globalThis.Enrich = (() => {
     if (/^C\d/.test(r) && /CP_|Elec|Tantal|CASE-[A-E]|_Pol|POL/i.test(fp + " " + name)) return "plus1";
     if (/^(BT|BAT|BZ|LS)\d/.test(r)) return "plus1";
     if (/^(U|IC|Q|VT|T\d|Y|X|OSC|MOD)/.test(r)) return p.pads.filter(q => q[3] !== 2).length > 2 ? "pin1" : "";
-    if (/^(J|P|CN|CON|USB|FPC)\d/.test(r) && !p.tht && FINE.test(fp)) return "pin1";
+    if (/^(J|P|CN|CON|USB|FPC)\d/.test(r) && !p.tht && fine(p, fp)) return "pin1";
     return "";
   }
   // pad that carries the polarity mark: "1" in most libraries; some name diode pads K/A, polarised caps +/-, BGA balls A1
@@ -56,7 +58,7 @@ globalThis.Enrich = (() => {
     // the footprint name is sometimes just a part number (嘉立创 libraries); the supplier footprint field says the package
     const fp = [p.fp, p.props && (p.props["Supplier Footprint"] || p.props.package || p.props.Package)].filter(Boolean).join(" ");
     const smdPads = p.pads.filter(q => q[3] === 0).length;
-    if (FINE.test(fp)) return 1;
+    if (fine(p, fp)) return 1;
     if (/^(D|LED|ZD|TVS|VD)\d/.test(r) || /^LED/.test(r) || p.pol === "plus1") return 5;
     if (MID.test(fp) && !/^(R|C|L|FB)\d/.test(r)) return 2;
     if (/^(U|IC)\d/.test(r) && smdPads >= 10) return 1;   // many-pin IC with an unrecognised package name
@@ -121,6 +123,7 @@ globalThis.Enrich = (() => {
       if (m) { note = m[1]; nm = nm.replace(m[0], "").trim() || nm; }
       p.nm = nm; p.lcsc = lcsc; p.mpn = mpn; p.note = note;
       if (b && b.dnp) p.dnp = 1;
+      if (b && b.nobom) p.nobom = 1;
       p.tp = isTP(p) ? 1 : 0;
       p.skip = (p.tp || p.nobom || nothing(p)) ? 1 : 0;
       p.pol = p.skip ? "" : polarity(p, nm);

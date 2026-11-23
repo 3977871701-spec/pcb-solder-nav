@@ -28,6 +28,7 @@ globalThis.Tables = (() => {
       const mi = findCol(H, [/^(mpn|manufacturer part|manufacturer_part_number|mfr ?p\/?n|mfr part|partnumber|part number|型号|料号|厂家型号|制造商型号)/]);
       const fi = findCol(H, [/^(footprint|封装|package|pattern)$/]);
       const xi = findCol(H, [/^(dnp|populate|do not (populate|place)|不贴|贴片)$/]);
+      const ai = findCol(H, [/^(add into bom|加入bom|添加到bom)$/]); // 嘉立创EDA: "no" = left out of the BOM
       if (ci < 0 && li < 0 && mi < 0) return null; // a CPL or something else
       const map = {};
       for (const r of rows.slice(h + 1)) {
@@ -35,7 +36,8 @@ globalThis.Tables = (() => {
         if (!refs.length) continue;
         const dnpCell = xi >= 0 ? low(r[xi]) : "";
         const dnp = /^(dnp|yes|true|1|不贴|no ?pop|n\/?p)$/.test(dnpCell) || (H[xi] === "populate" && /^(no|false|0)$/.test(dnpCell));
-        for (const d of refs) map[d] = { comment: nameOf(r), lcsc: li >= 0 ? r[li] || "" : "", mpn: mi >= 0 ? r[mi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", dnp };
+        const nobom = ai >= 0 && /^(no|false|0|否)$/.test(low(r[ai]));
+        for (const d of refs) map[d] = { nobom, comment: nameOf(r), lcsc: li >= 0 ? r[li] || "" : "", mpn: mi >= 0 ? r[mi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", dnp };
       }
       return Object.keys(map).length ? map : null;
     }
