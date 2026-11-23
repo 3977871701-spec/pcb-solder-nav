@@ -117,6 +117,21 @@ async function ingest(list) {
     const heir = S.boards.find(x => newKeys.has(x.key) && !doneAll[x.key] && sameDesign(old, x));
     markDeleted(old.key); DB.del(old.key); if (heir) moveProgress(old.key, heir); else dropProgress(old.key); S.boards = S.boards.filter(x => x !== old);
   }
+  // BOM imported separately (e.g. 嘉立创's BOM_*.csv after the Gerber + 坐标文件): attach it to the open board, or else
+  // to the stored board whose designators it matches best (same fit rule as Project.load)
+  const bomFor = [];
+  if (!added.length) for (const lb of res.looseBoms || []) {
+    const keys = Object.keys(lb.bom);
+    const fit = b => {
+      const refs = new Set(b.parts.map(p => p.r)), hit = keys.filter(r => refs.has(r)).length;
+      const real = Math.max(1, [...refs].filter(r => !/^(TP|MH|H|FID|MARK|PAD)\d/i.test(r)).length);
+      return hit >= 0.8 * keys.length && hit >= 0.5 * real ? hit + (b === S.b ? 0.5 : 0) : 0;
+    };
+    const b = S.boards.filter(fit).sort((x, y) => fit(y) - fit(x))[0];
+    if (!b) { res.notes.push(`${lb.file}：是 BOM，但和已导入的板子位号对不上；请把它和 Gerber、坐标文件一起拖进来`); continue; }
+    Enrich.enrich(b, lb.bom); b.bomFile = lb.file; DB.put(b); markDirty(b.key); bomFor.push(b);
+  }
+  if (bomFor.length) { const b = bomFor[0]; toast(`已把 BOM ${b.bomFile} 用到「${b.name}」，器件名称和分组已更新`); showApp(); openBoard(b.key); return; }
   const schematicCount = ingestSchematics(res.schematics || [], roots);
   const msgs = [...res.errors.map(e => "✗ " + e), ...res.notes.map(n => "· " + n)];
   S.flash = null;

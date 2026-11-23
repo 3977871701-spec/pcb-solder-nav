@@ -16,7 +16,14 @@ globalThis.Tables = (() => {
       const H = rows[h].map(low);
       const di = findCol(H, [/^(designators?|references?|refs?|refdes|ref des|位号|标号|元件位号|器件位号)$/, /^(designator|reference|位号)/]);
       if (di < 0) continue;
-      const ci = findCol(H, [/^(comment|名称|注释)$/, /^(value|值|参数|规格)$/, /^(description|描述)$/]);
+      // Comment and Value are read separately: 嘉立创EDA (esp. projects imported from Altium) exports the symbol name in
+      // Comment ("RESISTOR", "CAP NP", "111-1002529_0") and the real part value in Value ("10K", "10uF\16V")
+      const ci0 = findCol(H, [/^(comment|名称|注释)$/]), vi = findCol(H, [/^(value|值|参数|规格)$/]), dsi = findCol(H, [/^(description|描述)$/]);
+      const ci = ci0 >= 0 ? ci0 : vi >= 0 ? vi : dsi;
+      const nameOf = r => {
+        const c = ci0 >= 0 ? String(r[ci0] || "").trim() : "", v = vi >= 0 ? String(r[vi] || "").trim().replace(/\\/g, "/") : "";
+        return v || c || (dsi >= 0 ? String(r[dsi] || "").trim() : "");
+      };
       const li = findCol(H, [/lcsc|jlcpcb|^jlc|supplier part|立创|商城编号|供应商编号/]);
       const mi = findCol(H, [/^(mpn|manufacturer part|manufacturer_part_number|mfr ?p\/?n|mfr part|partnumber|part number|型号|料号|厂家型号|制造商型号)/]);
       const fi = findCol(H, [/^(footprint|封装|package|pattern)$/]);
@@ -28,7 +35,7 @@ globalThis.Tables = (() => {
         if (!refs.length) continue;
         const dnpCell = xi >= 0 ? low(r[xi]) : "";
         const dnp = /^(dnp|yes|true|1|不贴|no ?pop|n\/?p)$/.test(dnpCell) || (H[xi] === "populate" && /^(no|false|0)$/.test(dnpCell));
-        for (const d of refs) map[d] = { comment: ci >= 0 ? r[ci] || "" : "", lcsc: li >= 0 ? r[li] || "" : "", mpn: mi >= 0 ? r[mi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", dnp };
+        for (const d of refs) map[d] = { comment: nameOf(r), lcsc: li >= 0 ? r[li] || "" : "", mpn: mi >= 0 ? r[mi] || "" : "", fp: fi >= 0 ? r[fi] || "" : "", dnp };
       }
       return Object.keys(map).length ? map : null;
     }

@@ -315,8 +315,10 @@ globalThis.Project = (() => {
         for (const e of docs.errors) errors.push(`${c.path} 的页面 ${e}`);
       } catch (err) { errors.push(`${c.path}：${err.message}`); }
     }
-    if (!boards.length && !schematics.length && !errors.length && !notes.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、OrCAD .DSN 原理图、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
-    return { boards, schematics, errors, notes };
+    // a BOM dropped on its own: the page attaches it to a board imported earlier
+    const looseBoms = boards.length ? [] : boms.map(t => ({ bom: t.bom, file: baseOf(t.c.path) }));
+    if (!boards.length && !schematics.length && !errors.length && !notes.length && !looseBoms.length) notes.push("没有找到能识别的板子或原理图。支持：KiCad .kicad_pcb、Altium .PcbDoc / .SchDoc、OrCAD .DSN 原理图、Allegro .brd、IPC-2581、ODB++、嘉立创EDA专业版工程，或 Gerber + 坐标文件。");
+    return { boards, schematics, errors, notes, looseBoms };
   }
   return { load, expand, classify };
 })();
